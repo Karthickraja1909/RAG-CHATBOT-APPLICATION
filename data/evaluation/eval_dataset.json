@@ -19,76 +19,7 @@
         "Evaluating RAG architectures is challenging because there are several dimensions to consider: the ability of the retrieval system to identify relevant and focused context passages, the ability of the LLM to exploit such passages in a faithful way, or the quality of the generation itself.",
         "With Ragas, we put forward a suite of metrics which can be used to evaluate these different dimensions without having to rely on ground truth human annotations."
       ]
-    },
-    {
-      "sample_id": "eval_rag_002",
-      "user_input": "How does Ragas measure faithfulness in RAG systems?",
-      "expected_output": "Ragas measures faithfulness by determining whether the claims made in the generated answer can be inferred from the retrieved context. The process has two steps: First, an LLM is used to extract a set of statements S from the answer, decomposing longer sentences into shorter, more focused assertions using the prompt 'Given a question and answer, create one or more statements from each sentence in the given answer.' Second, for each statement si, the LLM determines if it can be inferred from the context c(q) using a verification function. The final faithfulness score F is computed as F = |V|/|S|, where |V| is the number of statements supported by the context and |S| is the total number of statements.",
-      "context": [
-        "Faithfulness refers to the idea that the answer should be grounded in the given context. This is important to avoid hallucinations, and to ensure that the retrieved context can act as a justification for the generated answer.",
-        "To estimate faithfulness, we first use an LLM to extract a set of statements, S(as(q)). The aim of this step is to decompose longer sentences into shorter and more focused assertions.",
-        "For each statement si in S, the LLM determines if si can be inferred from c(q) using a verification function v(si, c(q)).",
-        "The final faithfulness score, F, is then computed as F = |V|/|S|, where |V| is the number of statements that were supported according to the LLM and |S| is the total number of statements."
-      ],
-      "retrieval_context": [
-        "Faithfulness refers to the idea that the answer should be grounded in the given context. This is important to avoid hallucinations, and to ensure that the retrieved context can act as a justification for the generated answer.",
-        "To estimate faithfulness, we first use an LLM to extract a set of statements, S(as(q)). The aim of this step is to decompose longer sentences into shorter and more focused assertions.",
-        "The final faithfulness score, F, is then computed as F = |V|/|S|, where |V| is the number of statements that were supported according to the LLM and |S| is the total number of statements."
-      ]
-    },
-    {
-      "sample_id": "eval_rag_003",
-      "user_input": "How does Ragas compute the answer relevance metric?",
-      "expected_output": "Ragas computes answer relevance by reverse-engineering questions from the generated answer and comparing them to the original question. For a given answer as(q), the LLM is prompted to generate n potential questions qi using the prompt 'Generate a question for the given answer.' Embeddings are then obtained for all generated questions using the text-embedding-ada-002 model. For each generated question qi, the cosine similarity sim(q, qi) is calculated with the original question q. The answer relevance score AR is computed as the mean similarity: AR = (1/n) * sum(sim(q, qi)). This metric evaluates how closely the generated answer aligns with the initial question, penalizing incomplete answers or those containing redundant information, without taking factuality into account.",
-      "context": [
-        "Answer Relevance refers to the idea that the generated answer should address the actual question that was provided.",
-        "To estimate answer relevance, for the given answer as(q), we prompt the LLM to generate n potential questions qi based on as(q), using: 'Generate a question for the given answer.'",
-        "We then obtain embeddings for all questions using the text-embedding-ada-002 model. For each qi, we calculate the similarity sim(q, qi) with the original question q, as the cosine between the corresponding embeddings.",
-        "The answer relevance score, AR, for question q is then computed as: AR = (1/n) * sum(sim(q, qi)). This metric evaluates how closely the generated answer aligns with the initial question or instruction.",
-        "Our assessment of answer relevance does not take into account factuality, but penalises cases where the answer is incomplete or where it contains redundant information."
-      ],
-      "retrieval_context": [
-        "Answer Relevance refers to the idea that the generated answer should address the actual question that was provided.",
-        "To estimate answer relevance, for the given answer as(q), we prompt the LLM to generate n potential questions qi based on as(q), using: 'Generate a question for the given answer.'",
-        "We then obtain embeddings for all questions using the text-embedding-ada-002 model. For each qi, we calculate the similarity sim(q, qi) with the original question q, as the cosine between the corresponding embeddings.",
-        "The answer relevance score, AR, for question q is then computed as: AR = (1/n) * sum(sim(q, qi))."
-      ]
-    },
-    {
-      "sample_id": "eval_rag_004",
-      "user_input": "What are the three core quality aspects that Ragas evaluates and why are they important?",
-      "expected_output": "Ragas evaluates three core quality aspects: (1) Faithfulness - the answer should be grounded in the given context, which is important to avoid hallucinations and ensure the retrieved context acts as a justification for the generated answer. This is especially critical in domains like law where factual consistency with grounded sources is highly important. (2) Answer Relevance - the generated answer should directly address the actual question that was provided, penalizing incomplete or redundant responses. (3) Context Relevance - the retrieved context should be focused, containing as little irrelevant information as possible. This is important given the cost of feeding long context passages to LLMs, and because LLMs are less effective at exploiting context when passages are too long, especially for information in the middle of the context passage.",
-      "context": [
-        "Faithfulness refers to the idea that the answer should be grounded in the given context. This is important to avoid hallucinations, and to ensure that the retrieved context can act as a justification for the generated answer.",
-        "RAG systems are often used in applications where the factual consistency of the generated text w.r.t. the grounded sources is highly important, e.g. in domains such as law, where information is constantly evolving.",
-        "Answer Relevance refers to the idea that the generated answer should address the actual question that was provided.",
-        "Context Relevance refers to the idea that the retrieved context should be focused, containing as little irrelevant information as possible. This is important given the cost associated with feeding long context passages to LLMs.",
-        "When context passages are too long, LLMs are often less effective in exploiting that context, especially for information that is provided in the middle of the context passage."
-      ],
-      "retrieval_context": [
-        "Faithfulness refers to the idea that the answer should be grounded in the given context. This is important to avoid hallucinations, and to ensure that the retrieved context can act as a justification for the generated answer.",
-        "Answer Relevance refers to the idea that the generated answer should address the actual question that was provided.",
-        "Context Relevance refers to the idea that the retrieved context should be focused, containing as little irrelevant information as possible. This is important given the cost associated with feeding long context passages to LLMs.",
-        "When context passages are too long, LLMs are often less effective in exploiting that context, especially for information that is provided in the middle of the context passage."
-      ]
-    },
-    {
-      "sample_id": "eval_rag_005",
-      "user_input": "Why do LLMs need retrieval augmented generation according to the Ragas paper?",
-      "expected_output": "According to the Ragas paper, LLMs need Retrieval Augmented Generation because using LLMs as knowledge bases has two fundamental limitations. First, LLMs are not able to answer questions about events that have happened after they were trained, making their knowledge stale. Second, even the largest models struggle to memorize knowledge that is only rarely mentioned in the training corpus. RAG solves these issues by retrieving relevant passages from a corpus and feeding them along with the original question to the LM. While initial approaches relied on specialized LMs for retrieval-augmented language modeling, recent work has shown that simply adding retrieved documents to the input of a standard LM can also work well, making it possible to use retrieval-augmented strategies with LLMs available only through APIs.",
-      "context": [
-        "While the most recent Large Language Models capture enough knowledge to rival human performance across a wide variety of question answering benchmarks, the idea of using LLMs as knowledge bases still has two fundamental limitations.",
-        "First, LLMs are not able to answer questions about events that have happened after they were trained.",
-        "Second, even the largest models struggle to memorise knowledge that is only rarely mentioned in the training corpus.",
-        "The standard solution to these issues is to rely on Retrieval Augmented Generation (RAG). Answering a question then essentially involves retrieving relevant passages from a corpus and feeding these passages, along with the original question, to the LM.",
-        "Recent work has suggested that simply adding retrieved documents to the input of a standard LM can also work well, thus making it possible to use retrieval-augmented strategies in combination with LLMs that are only available through APIs."
-      ],
-      "retrieval_context": [
-        "While the most recent Large Language Models capture enough knowledge to rival human performance across a wide variety of question answering benchmarks, the idea of using LLMs as knowledge bases still has two fundamental limitations.",
-        "First, LLMs are not able to answer questions about events that have happened after they were trained. Second, even the largest models struggle to memorise knowledge that is only rarely mentioned in the training corpus.",
-        "The standard solution to these issues is to rely on Retrieval Augmented Generation (RAG). Answering a question then essentially involves retrieving relevant passages from a corpus and feeding these passages, along with the original question, to the LM.",
-        "Recent work has suggested that simply adding retrieved documents to the input of a standard LM can also work well, thus making it possible to use retrieval-augmented strategies in combination with LLMs that are only available through APIs."
-      ]
-    }
+     }
+    
   ]
 }

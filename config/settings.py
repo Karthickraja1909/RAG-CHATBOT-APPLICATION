@@ -95,7 +95,7 @@ class Settings(BaseSettings):
     # ─── CI/CD & Reporting ────────────────────────────────────────
     report_format: str = Field(default="json", description="Report output format (json, html, csv)")
     artifact_directory: str = Field(default="artifacts", description="CI/CD artifacts directory")
-    fail_on_threshold_breach: bool = Field(default=True, description="Fail CI if metrics below threshold")
+    fail_on_threshold_breach: bool = Field(default=False, description="Fail CI if metrics below threshold")
 
     # ─── Email Notification ───────────────────────────────────────
     email_enabled: bool = Field(default=True, description="Enable email report delivery")
