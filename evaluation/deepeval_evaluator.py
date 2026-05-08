@@ -101,9 +101,9 @@ class DeepEvalEvaluator:
                     model_name=eval_model_name,
                     api_key=self.settings.openrouter_api_key,
                     base_url=self.settings.openrouter_base_url,
-                    max_tokens=150,
+                    max_tokens=100,
                 )
-                logger.info(f"DeepEval configured for OpenRouter: {eval_model_name} (max_tokens=150)")
+                logger.info(f"DeepEval configured for OpenRouter: {eval_model_name} (max_tokens=100)")
             else:
                 eval_model = eval_model_name
 
