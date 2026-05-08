@@ -3,10 +3,12 @@ name: GenAI RAG System - CI/CD Pipeline
 on:
   push:
     branches: [main, develop]
-
+    paths:
+      - "genai_rag_system/**"
   pull_request:
     branches: [main]
-
+    paths:
+      - "genai_rag_system/**"
   workflow_dispatch:
     inputs:
       run_evaluation:
@@ -17,7 +19,6 @@ on:
         options:
           - "true"
           - "false"
-
       eval_framework:
         description: "Evaluation framework to use"
         required: false
@@ -30,26 +31,28 @@ on:
 
 env:
   PYTHON_VERSION: "3.11"
+  WORKING_DIRECTORY: "genai_rag_system"
 
 jobs:
-
-  # ============================================================
-  # Job 1: Code Quality
-  # ============================================================
-
+  # ═══════════════════════════════════════════════════════════════
+  # Job 1: Code Quality & Linting
+  # ═══════════════════════════════════════════════════════════════
   code-quality:
     name: Code Quality Checks
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ env.WORKING_DIRECTORY }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Python
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-          cache: pip
+          cache: "pip"
 
       - name: Install dependencies
         run: |
@@ -57,48 +60,46 @@ jobs:
           pip install -r requirements.txt
           pip install ruff mypy
 
-      - name: Ruff Lint
+      - name: Run Ruff linter
         run: ruff check . --output-format=github
 
-      - name: Ruff Format Check
+      - name: Run Ruff formatter check
         run: ruff format --check .
 
-      - name: MyPy Type Check
-        run: mypy . --ignore-missing-imports --no-strict-optional
+      - name: Run type checking (mypy)
+        run: mypy --ignore-missing-imports --no-strict-optional .
         continue-on-error: true
 
-  # ============================================================
+  # ═══════════════════════════════════════════════════════════════
   # Job 2: Unit Tests
-  # ============================================================
-
+  # ═══════════════════════════════════════════════════════════════
   unit-tests:
     name: Unit Tests
     runs-on: ubuntu-latest
     needs: code-quality
+    defaults:
+      run:
+        working-directory: ${{ env.WORKING_DIRECTORY }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Python
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-          cache: pip
+          cache: "pip"
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pytest pytest-cov
 
-      - name: Create artifacts folder
-        run: mkdir -p artifacts
-
-      - name: Run Unit Tests
+      - name: Run unit tests with coverage
         env:
           ENVIRONMENT: test
-          OPENAI_API_KEY: "test-key"
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || 'test-key-for-ci' }}
         run: |
           pytest tests/ -v \
             --tb=short \
@@ -109,49 +110,48 @@ jobs:
             --cov-report=term-missing \
             -k "not integration"
 
-      - name: Upload Test Results
+      - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: test-results
-          path: artifacts/test-results.xml
+          path: ${{ env.WORKING_DIRECTORY }}/artifacts/test-results.xml
 
-      - name: Upload Coverage Report
+      - name: Upload coverage report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
-          path: artifacts/coverage-html/
+          path: ${{ env.WORKING_DIRECTORY }}/artifacts/coverage-html/
 
-  # ============================================================
+  # ═══════════════════════════════════════════════════════════════
   # Job 3: Integration Tests
-  # ============================================================
-
+  # ═══════════════════════════════════════════════════════════════
   integration-tests:
     name: Integration Tests
     runs-on: ubuntu-latest
     needs: unit-tests
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    defaults:
+      run:
+        working-directory: ${{ env.WORKING_DIRECTORY }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Python
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-          cache: pip
+          cache: "pip"
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Create artifacts folder
-        run: mkdir -p artifacts
-
-      - name: Run Integration Tests
+      - name: Run integration tests
         env:
           ENVIRONMENT: integration
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -162,45 +162,43 @@ jobs:
             --junitxml=artifacts/integration-results.xml
         continue-on-error: true
 
-      - name: Upload Integration Results
+      - name: Upload integration test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: integration-results
-          path: artifacts/integration-results.xml
+          name: integration-test-results
+          path: ${{ env.WORKING_DIRECTORY }}/artifacts/integration-results.xml
 
-  # ============================================================
-  # Job 4: LLM Evaluation
-  # ============================================================
-
+  # ═══════════════════════════════════════════════════════════════
+  # Job 4: LLM Evaluation Pipeline
+  # ═══════════════════════════════════════════════════════════════
   llm-evaluation:
     name: LLM Evaluation Pipeline
     runs-on: ubuntu-latest
     needs: unit-tests
-
     if: |
       (github.event_name == 'workflow_dispatch' && github.event.inputs.run_evaluation == 'true') ||
       (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    defaults:
+      run:
+        working-directory: ${{ env.WORKING_DIRECTORY }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Python
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-          cache: pip
+          cache: "pip"
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Create artifacts folder
-        run: mkdir -p artifacts/evaluation
-
-      - name: Determine Evaluation Framework
+      - name: Determine evaluation framework
         id: eval-config
         run: |
           if [ "${{ github.event.inputs.eval_framework }}" = "" ]; then
@@ -209,54 +207,90 @@ jobs:
             echo "framework=${{ github.event.inputs.eval_framework }}" >> $GITHUB_OUTPUT
           fi
 
-      - name: Run Evaluation
+      - name: Run LLM Evaluation
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          EVAL_MODEL: gpt-4o-mini
-          EVAL_THRESHOLD: 0.7
+          EVAL_MODEL: ${{ vars.EVAL_MODEL || 'gpt-4o-mini' }}
+          EVAL_THRESHOLD: ${{ vars.EVAL_THRESHOLD || '0.7' }}
+          DEEPEVAL_METRICS: ${{ vars.DEEPEVAL_METRICS || 'answer_relevancy,faithfulness,contextual_precision,contextual_recall' }}
+          RAGAS_METRICS: ${{ vars.RAGAS_METRICS || 'faithfulness,answer_relevancy,context_precision,context_recall' }}
+          FAIL_ON_THRESHOLD_BREACH: "true"
+          EVAL_RESULTS_PATH: "artifacts/evaluation"
         run: |
           python -m scripts.run_evaluation \
             --framework ${{ steps.eval-config.outputs.framework }} \
             --dataset-path data/evaluation/eval_dataset.json \
             --output-dir artifacts/evaluation
 
-      - name: Upload Evaluation Reports
+      - name: Check evaluation thresholds
+        env:
+          EVAL_THRESHOLD: ${{ vars.EVAL_THRESHOLD || '0.7' }}
+        run: |
+          python -m scripts.check_thresholds \
+            --results-dir artifacts/evaluation \
+            --threshold $EVAL_THRESHOLD
+
+      - name: Upload evaluation reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: evaluation-reports
-          path: artifacts/evaluation/
+          path: ${{ env.WORKING_DIRECTORY }}/artifacts/evaluation/
 
-  # ============================================================
-  # Job 5: Build
-  # ============================================================
+      - name: Comment evaluation results on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = '${{ env.WORKING_DIRECTORY }}/artifacts/evaluation/summary.json';
+            
+            if (fs.existsSync(path)) {
+              const summary = JSON.parse(fs.readFileSync(path, 'utf8'));
+              const body = `## 🔬 LLM Evaluation Results\n\n` +
+                `| Metric | Score | Status |\n|--------|-------|--------|\n` +
+                Object.entries(summary.metrics || {}).map(([name, data]) => 
+                  `| ${name} | ${(data.average_score * 100).toFixed(1)}% | ${data.average_score >= 0.7 ? '✅' : '❌'} |`
+                ).join('\n') +
+                `\n\n**Overall Pass Rate:** ${(summary.overall_pass_rate * 100).toFixed(1)}%`;
+              
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: body
+              });
+            }
 
+  # ═══════════════════════════════════════════════════════════════
+  # Job 5: Build & Package
+  # ═══════════════════════════════════════════════════════════════
   build:
-    name: Build Package
+    name: Build & Package
     runs-on: ubuntu-latest
-    needs: unit-tests
-
+    needs: [unit-tests]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    defaults:
+      run:
+        working-directory: ${{ env.WORKING_DIRECTORY }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Python
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install Build Tools
-        run: |
-          python -m pip install --upgrade pip
-          pip install build wheel
+      - name: Install build tools
+        run: pip install build wheel
 
-      - name: Build Package
+      - name: Build package
         run: python -m build
 
-      - name: Upload Build Artifacts
+      - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: dist-package
-          path: dist/
+          path: ${{ env.WORKING_DIRECTORY }}/dist/
