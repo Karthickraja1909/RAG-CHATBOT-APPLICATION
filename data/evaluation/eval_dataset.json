@@ -6,348 +6,88 @@
   "samples": [
     {
       "sample_id": "eval_rag_001",
-      "user_input": "What is retrieval augmented generation and how does it work?",
-      "expected_output": "Retrieval Augmented Generation (RAG) is an AI framework that enhances LLM responses by first retrieving relevant documents from an external knowledge base, then using those documents as context for the language model to generate accurate, grounded responses. The process involves: (1) encoding the user query into a vector, (2) performing similarity search against a vector database, (3) retrieving top-k relevant documents, and (4) passing the retrieved context along with the query to the LLM for response generation.",
+      "user_input": "What is the Ragas framework and what problem does it solve?",
+      "expected_output": "Ragas (Retrieval Augmented Generation Assessment) is a framework for reference-free evaluation of Retrieval Augmented Generation (RAG) pipelines. It addresses the challenge of evaluating RAG systems across multiple dimensions without requiring ground truth human annotations. RAG systems are composed of a retrieval and an LLM-based generation module, and evaluating them is challenging because there are several dimensions to consider: the ability of the retrieval system to identify relevant and focused context passages, the ability of the LLM to exploit such passages in a faithful way, and the quality of the generation itself. Ragas provides a suite of metrics to evaluate these different dimensions, enabling faster evaluation cycles, which is especially important given the fast adoption of LLMs.",
       "context": [
-        "RAG (Retrieval Augmented Generation) is an AI framework that enhances LLM responses by retrieving relevant information from external knowledge bases before generating answers.",
-        "The RAG process consists of four main steps: query encoding, similarity search in vector database, document retrieval, and context-augmented generation.",
-        "RAG reduces hallucinations by grounding LLM responses in actual retrieved documents rather than relying solely on parametric knowledge."
+        "We introduce Ragas (Retrieval Augmented Generation Assessment), a framework for reference-free evaluation of Retrieval Augmented Generation (RAG) pipelines.",
+        "RAG systems are composed of a retrieval and an LLM based generation module, and provide LLMs with knowledge from a reference textual database, which enables them to act as a natural language layer between a user and textual databases, reducing the risk of hallucinations.",
+        "Evaluating RAG architectures is challenging because there are several dimensions to consider: the ability of the retrieval system to identify relevant and focused context passages, the ability of the LLM to exploit such passages in a faithful way, or the quality of the generation itself.",
+        "With Ragas, we put forward a suite of metrics which can be used to evaluate these different dimensions without having to rely on ground truth human annotations."
       ],
       "retrieval_context": [
-        "RAG (Retrieval Augmented Generation) is an AI framework that enhances LLM responses by retrieving relevant information from external knowledge bases before generating answers.",
-        "The RAG architecture combines a retriever component that finds relevant documents with a generator component (LLM) that produces the final answer using retrieved context.",
-        "RAG reduces hallucinations by grounding LLM responses in actual retrieved documents rather than relying solely on parametric knowledge."
+        "We introduce Ragas (Retrieval Augmented Generation Assessment), a framework for reference-free evaluation of Retrieval Augmented Generation (RAG) pipelines.",
+        "Evaluating RAG architectures is challenging because there are several dimensions to consider: the ability of the retrieval system to identify relevant and focused context passages, the ability of the LLM to exploit such passages in a faithful way, or the quality of the generation itself.",
+        "With Ragas, we put forward a suite of metrics which can be used to evaluate these different dimensions without having to rely on ground truth human annotations."
       ]
     },
     {
       "sample_id": "eval_rag_002",
-      "user_input": "How does FAISS perform vector similarity search?",
-      "expected_output": "FAISS (Facebook AI Similarity Search) performs vector similarity search by creating optimized index structures for high-dimensional vectors. It supports multiple index types: IndexFlatL2 for exact L2 distance search, IndexFlatIP for inner product (cosine similarity with normalized vectors), IndexIVFFlat for approximate search using inverted file indexes with Voronoi cells, and IndexIVFPQ for compressed representations using product quantization. FAISS encodes vectors into the chosen index structure, then at query time performs nearest-neighbor search to find the most similar vectors efficiently.",
+      "user_input": "How does Ragas measure faithfulness in RAG systems?",
+      "expected_output": "Ragas measures faithfulness by determining whether the claims made in the generated answer can be inferred from the retrieved context. The process has two steps: First, an LLM is used to extract a set of statements S from the answer, decomposing longer sentences into shorter, more focused assertions using the prompt 'Given a question and answer, create one or more statements from each sentence in the given answer.' Second, for each statement si, the LLM determines if it can be inferred from the context c(q) using a verification function. The final faithfulness score F is computed as F = |V|/|S|, where |V| is the number of statements supported by the context and |S| is the total number of statements.",
       "context": [
-        "FAISS is a library developed by Facebook Research for efficient similarity search and clustering of dense vectors in high-dimensional spaces.",
-        "FAISS supports several index types: IndexFlatL2 (exact L2 distance), IndexFlatIP (exact inner product/cosine similarity), IndexIVFFlat (approximate search with inverted file indexes), and IndexIVFPQ (product quantization for compression).",
-        "For cosine similarity in FAISS, vectors are L2-normalized before indexing with IndexFlatIP, which then computes inner product equivalent to cosine similarity.",
-        "FAISS can handle billions of vectors using GPU acceleration and memory-efficient index types like HNSW and PQ."
+        "Faithfulness refers to the idea that the answer should be grounded in the given context. This is important to avoid hallucinations, and to ensure that the retrieved context can act as a justification for the generated answer.",
+        "To estimate faithfulness, we first use an LLM to extract a set of statements, S(as(q)). The aim of this step is to decompose longer sentences into shorter and more focused assertions.",
+        "For each statement si in S, the LLM determines if si can be inferred from c(q) using a verification function v(si, c(q)).",
+        "The final faithfulness score, F, is then computed as F = |V|/|S|, where |V| is the number of statements that were supported according to the LLM and |S| is the total number of statements."
       ],
       "retrieval_context": [
-        "FAISS is a library developed by Facebook Research for efficient similarity search and clustering of dense vectors in high-dimensional spaces.",
-        "FAISS supports several index types: IndexFlatL2 (exact L2 distance), IndexFlatIP (exact inner product/cosine similarity), IndexIVFFlat (approximate search with inverted file indexes), and IndexIVFPQ (product quantization for compression).",
-        "For cosine similarity in FAISS, vectors are L2-normalized before indexing with IndexFlatIP, which then computes inner product equivalent to cosine similarity."
+        "Faithfulness refers to the idea that the answer should be grounded in the given context. This is important to avoid hallucinations, and to ensure that the retrieved context can act as a justification for the generated answer.",
+        "To estimate faithfulness, we first use an LLM to extract a set of statements, S(as(q)). The aim of this step is to decompose longer sentences into shorter and more focused assertions.",
+        "The final faithfulness score, F, is then computed as F = |V|/|S|, where |V| is the number of statements that were supported according to the LLM and |S| is the total number of statements."
       ]
     },
     {
       "sample_id": "eval_rag_003",
-      "user_input": "What is the faithfulness metric in RAG evaluation?",
-      "expected_output": "Faithfulness measures whether the claims made in the LLM-generated response are supported by the retrieved context. It is calculated as the ratio of claims in the response that can be inferred from the retrieval context to the total number of claims made. A faithfulness score of 1.0 means every claim in the response is supported by the retrieved documents. This metric detects hallucinations where the LLM generates information not present in the provided context.",
+      "user_input": "How does Ragas compute the answer relevance metric?",
+      "expected_output": "Ragas computes answer relevance by reverse-engineering questions from the generated answer and comparing them to the original question. For a given answer as(q), the LLM is prompted to generate n potential questions qi using the prompt 'Generate a question for the given answer.' Embeddings are then obtained for all generated questions using the text-embedding-ada-002 model. For each generated question qi, the cosine similarity sim(q, qi) is calculated with the original question q. The answer relevance score AR is computed as the mean similarity: AR = (1/n) * sum(sim(q, qi)). This metric evaluates how closely the generated answer aligns with the initial question, penalizing incomplete answers or those containing redundant information, without taking factuality into account.",
       "context": [
-        "Faithfulness measures if the generated answer is grounded in the retrieved context without hallucination.",
-        "Faithfulness formula: Number of claims in response supported by retrieval context / Total number of claims in response.",
-        "A faithfulness score of 1.0 indicates perfect grounding - all claims are supported by retrieved documents.",
-        "Faithfulness is different from hallucination metric: faithfulness checks against retrieval_context (what RAG retrieved), while hallucination checks against context (ground truth facts)."
+        "Answer Relevance refers to the idea that the generated answer should address the actual question that was provided.",
+        "To estimate answer relevance, for the given answer as(q), we prompt the LLM to generate n potential questions qi based on as(q), using: 'Generate a question for the given answer.'",
+        "We then obtain embeddings for all questions using the text-embedding-ada-002 model. For each qi, we calculate the similarity sim(q, qi) with the original question q, as the cosine between the corresponding embeddings.",
+        "The answer relevance score, AR, for question q is then computed as: AR = (1/n) * sum(sim(q, qi)). This metric evaluates how closely the generated answer aligns with the initial question or instruction.",
+        "Our assessment of answer relevance does not take into account factuality, but penalises cases where the answer is incomplete or where it contains redundant information."
       ],
       "retrieval_context": [
-        "Faithfulness measures if the generated answer is grounded in the retrieved context without hallucination.",
-        "Faithfulness formula: Number of claims in response supported by retrieval context / Total number of claims in response.",
-        "A faithfulness score of 1.0 indicates perfect grounding - all claims are supported by retrieved documents."
+        "Answer Relevance refers to the idea that the generated answer should address the actual question that was provided.",
+        "To estimate answer relevance, for the given answer as(q), we prompt the LLM to generate n potential questions qi based on as(q), using: 'Generate a question for the given answer.'",
+        "We then obtain embeddings for all questions using the text-embedding-ada-002 model. For each qi, we calculate the similarity sim(q, qi) with the original question q, as the cosine between the corresponding embeddings.",
+        "The answer relevance score, AR, for question q is then computed as: AR = (1/n) * sum(sim(q, qi))."
       ]
     },
     {
       "sample_id": "eval_rag_004",
-      "user_input": "Explain the difference between context precision and context recall.",
-      "expected_output": "Context Precision measures what fraction of the retrieved documents are actually relevant to answering the query - it evaluates retrieval quality by penalizing irrelevant documents in the results. Context Recall measures whether all the ground truth information needed to answer the query was successfully retrieved - it evaluates retrieval completeness. High precision means fewer irrelevant documents retrieved; high recall means all necessary information was captured. A system can have high precision but low recall (retrieves few but relevant docs) or high recall but low precision (retrieves everything including noise).",
+      "user_input": "What are the three core quality aspects that Ragas evaluates and why are they important?",
+      "expected_output": "Ragas evaluates three core quality aspects: (1) Faithfulness - the answer should be grounded in the given context, which is important to avoid hallucinations and ensure the retrieved context acts as a justification for the generated answer. This is especially critical in domains like law where factual consistency with grounded sources is highly important. (2) Answer Relevance - the generated answer should directly address the actual question that was provided, penalizing incomplete or redundant responses. (3) Context Relevance - the retrieved context should be focused, containing as little irrelevant information as possible. This is important given the cost of feeding long context passages to LLMs, and because LLMs are less effective at exploiting context when passages are too long, especially for information in the middle of the context passage.",
       "context": [
-        "Context Precision evaluates what fraction of retrieved documents are relevant to the user query. It penalizes irrelevant documents appearing in retrieval results.",
-        "Context Recall measures whether all relevant information needed to answer the query was retrieved from the knowledge base.",
-        "Context Precision focuses on retrieval quality (avoiding noise), while Context Recall focuses on retrieval completeness (capturing all needed info).",
-        "A retrieval system should optimize both: high precision reduces noise in context window, high recall ensures no critical information is missed."
+        "Faithfulness refers to the idea that the answer should be grounded in the given context. This is important to avoid hallucinations, and to ensure that the retrieved context can act as a justification for the generated answer.",
+        "RAG systems are often used in applications where the factual consistency of the generated text w.r.t. the grounded sources is highly important, e.g. in domains such as law, where information is constantly evolving.",
+        "Answer Relevance refers to the idea that the generated answer should address the actual question that was provided.",
+        "Context Relevance refers to the idea that the retrieved context should be focused, containing as little irrelevant information as possible. This is important given the cost associated with feeding long context passages to LLMs.",
+        "When context passages are too long, LLMs are often less effective in exploiting that context, especially for information that is provided in the middle of the context passage."
       ],
       "retrieval_context": [
-        "Context Precision evaluates what fraction of retrieved documents are relevant to the user query. It penalizes irrelevant documents appearing in retrieval results.",
-        "Context Recall measures whether all relevant information needed to answer the query was retrieved from the knowledge base.",
-        "A retrieval system should optimize both: high precision reduces noise in context window, high recall ensures no critical information is missed."
+        "Faithfulness refers to the idea that the answer should be grounded in the given context. This is important to avoid hallucinations, and to ensure that the retrieved context can act as a justification for the generated answer.",
+        "Answer Relevance refers to the idea that the generated answer should address the actual question that was provided.",
+        "Context Relevance refers to the idea that the retrieved context should be focused, containing as little irrelevant information as possible. This is important given the cost associated with feeding long context passages to LLMs.",
+        "When context passages are too long, LLMs are often less effective in exploiting that context, especially for information that is provided in the middle of the context passage."
       ]
     },
     {
       "sample_id": "eval_rag_005",
-      "user_input": "How does document chunking affect RAG performance?",
-      "expected_output": "Document chunking directly impacts RAG performance in several ways: (1) Chunk size determines the granularity of retrieval - smaller chunks provide more precise retrieval but may lose context, while larger chunks preserve context but may include irrelevant information. (2) Chunk overlap prevents information loss at boundaries by ensuring key concepts split across chunk boundaries are captured in at least one chunk. (3) Chunking strategy (fixed-size, recursive character splitting, semantic chunking) affects how well document structure is preserved. Typical production configurations use 500-1500 character chunks with 10-20% overlap.",
+      "user_input": "Why do LLMs need retrieval augmented generation according to the Ragas paper?",
+      "expected_output": "According to the Ragas paper, LLMs need Retrieval Augmented Generation because using LLMs as knowledge bases has two fundamental limitations. First, LLMs are not able to answer questions about events that have happened after they were trained, making their knowledge stale. Second, even the largest models struggle to memorize knowledge that is only rarely mentioned in the training corpus. RAG solves these issues by retrieving relevant passages from a corpus and feeding them along with the original question to the LM. While initial approaches relied on specialized LMs for retrieval-augmented language modeling, recent work has shown that simply adding retrieved documents to the input of a standard LM can also work well, making it possible to use retrieval-augmented strategies with LLMs available only through APIs.",
       "context": [
-        "Document chunking splits large texts into smaller segments suitable for embedding and retrieval in RAG systems.",
-        "Chunk size affects retrieval precision: smaller chunks (200-500 chars) are more precise but lose context; larger chunks (1000-2000 chars) preserve context but may include noise.",
-        "Chunk overlap (typically 10-20% of chunk size) prevents information loss at chunk boundaries by duplicating content at edges.",
-        "Common chunking strategies include fixed-size splitting, recursive character splitting (respects paragraphs/sentences), and semantic chunking (groups by meaning).",
-        "Production RAG systems typically use 500-1500 character chunks with 100-300 character overlap for optimal retrieval quality."
+        "While the most recent Large Language Models capture enough knowledge to rival human performance across a wide variety of question answering benchmarks, the idea of using LLMs as knowledge bases still has two fundamental limitations.",
+        "First, LLMs are not able to answer questions about events that have happened after they were trained.",
+        "Second, even the largest models struggle to memorise knowledge that is only rarely mentioned in the training corpus.",
+        "The standard solution to these issues is to rely on Retrieval Augmented Generation (RAG). Answering a question then essentially involves retrieving relevant passages from a corpus and feeding these passages, along with the original question, to the LM.",
+        "Recent work has suggested that simply adding retrieved documents to the input of a standard LM can also work well, thus making it possible to use retrieval-augmented strategies in combination with LLMs that are only available through APIs."
       ],
       "retrieval_context": [
-        "Document chunking splits large texts into smaller segments suitable for embedding and retrieval in RAG systems.",
-        "Chunk size affects retrieval precision: smaller chunks (200-500 chars) are more precise but lose context; larger chunks (1000-2000 chars) preserve context but may include noise.",
-        "Chunk overlap (typically 10-20% of chunk size) prevents information loss at chunk boundaries by duplicating content at edges.",
-        "Production RAG systems typically use 500-1500 character chunks with 100-300 character overlap for optimal retrieval quality."
-      ]
-    },
-    {
-      "sample_id": "eval_rag_006",
-      "user_input": "What is the LLM-as-a-Judge evaluation approach?",
-      "expected_output": "LLM-as-a-Judge is an evaluation paradigm where a language model (the judge) evaluates the quality of another LLM's outputs. The judge model receives the original input, the generated output, and specific evaluation criteria, then provides a numeric score (typically 0-1) along with reasoning for its assessment. This approach enables scalable, automated evaluation without human annotators while maintaining reasonable correlation with human judgments. Both DeepEval and RAGAS use this approach - they use GPT-4 or similar models to score metrics like faithfulness and answer relevancy.",
-      "context": [
-        "LLM-as-a-Judge is an evaluation paradigm where one LLM evaluates the quality of another LLM's outputs using structured criteria.",
-        "The judge model is prompted with specific evaluation criteria and asked to provide both a numeric score (0-1) and reasoning for its assessment.",
-        "This approach scales better than human evaluation while maintaining reasonable correlation with human judgments (typically 0.7-0.9 correlation).",
-        "Both DeepEval and RAGAS frameworks use LLM-as-a-Judge internally for computing metrics like faithfulness, answer relevancy, and contextual precision."
-      ],
-      "retrieval_context": [
-        "LLM-as-a-Judge is an evaluation paradigm where one LLM evaluates the quality of another LLM's outputs using structured criteria.",
-        "The judge model is prompted with specific evaluation criteria and asked to provide both a numeric score (0-1) and reasoning for its assessment.",
-        "Both DeepEval and RAGAS frameworks use LLM-as-a-Judge internally for computing metrics like faithfulness, answer relevancy, and contextual precision."
-      ]
-    },
-    {
-      "sample_id": "eval_rag_007",
-      "user_input": "How do embedding models convert text to vectors?",
-      "expected_output": "Embedding models convert text to vectors through a multi-step process: (1) Tokenization - the input text is split into tokens (subwords) using a vocabulary. (2) Encoding - tokens pass through transformer layers that capture contextual relationships between words. (3) Pooling - the final hidden states are aggregated (mean pooling, CLS token, or attention-weighted) into a single fixed-dimension vector. The resulting vector (e.g., 1536 dimensions for text-embedding-3-small) captures semantic meaning, where similar texts produce vectors that are close together in the embedding space as measured by cosine similarity.",
-      "context": [
-        "Embedding models use transformer architectures to convert text into dense vector representations that capture semantic meaning.",
-        "The embedding process involves tokenization, transformer encoding with attention mechanisms, and pooling of hidden states into a fixed-dimension vector.",
-        "OpenAI's text-embedding-3-small produces 1536-dimensional vectors; text-embedding-3-large produces 3072-dimensional vectors.",
-        "Similar texts produce vectors that are close together in embedding space, measured by cosine similarity (dot product of normalized vectors).",
-        "Embedding models are trained on large text corpora using contrastive learning objectives to learn meaningful semantic representations."
-      ],
-      "retrieval_context": [
-        "Embedding models use transformer architectures to convert text into dense vector representations that capture semantic meaning.",
-        "The embedding process involves tokenization, transformer encoding with attention mechanisms, and pooling of hidden states into a fixed-dimension vector.",
-        "OpenAI's text-embedding-3-small produces 1536-dimensional vectors; text-embedding-3-large produces 3072-dimensional vectors.",
-        "Similar texts produce vectors that are close together in embedding space, measured by cosine similarity (dot product of normalized vectors)."
-      ]
-    },
-    {
-      "sample_id": "eval_rag_008",
-      "user_input": "What is the hallucination metric and how is it different from faithfulness?",
-      "expected_output": "The Hallucination metric measures whether the LLM output contradicts known ground truth facts (context). It is calculated as: 1 - (Contradicted Contexts / Total Contexts). A high score means no hallucination. Faithfulness metric, on the other hand, measures whether claims in the output are supported by the retrieval context (what RAG actually retrieved). Key difference: Hallucination uses ground truth context to check for contradictions, while Faithfulness uses retrieval_context to check for support. Hallucination detects factual errors; Faithfulness detects unsupported claims from the RAG pipeline specifically.",
-      "context": [
-        "Hallucination metric checks if the LLM output contradicts known ground truth facts provided as context.",
-        "Hallucination score formula: 1 - (Number of contradicted contexts / Total number of contexts). High score = good (no hallucination).",
-        "Faithfulness metric checks if claims in the output are supported by the retrieval_context (documents retrieved by RAG).",
-        "Faithfulness formula: Number of supported claims / Total claims in output.",
-        "Key difference: Hallucination uses 'context' (ground truth), Faithfulness uses 'retrieval_context' (RAG-retrieved docs)."
-      ],
-      "retrieval_context": [
-        "Hallucination metric checks if the LLM output contradicts known ground truth facts provided as context.",
-        "Hallucination score formula: 1 - (Number of contradicted contexts / Total number of contexts). High score = good (no hallucination).",
-        "Faithfulness metric checks if claims in the output are supported by the retrieval_context (documents retrieved by RAG).",
-        "Key difference: Hallucination uses 'context' (ground truth), Faithfulness uses 'retrieval_context' (RAG-retrieved docs)."
-      ]
-    },
-    {
-      "sample_id": "eval_rag_009",
-      "user_input": "How do you set up a CI/CD pipeline for LLM evaluation?",
-      "expected_output": "Setting up a CI/CD pipeline for LLM evaluation involves: (1) Define evaluation dataset with test samples including inputs, expected outputs, and context. (2) Configure evaluation metrics with pass/fail thresholds (e.g., faithfulness >= 0.7). (3) Create a GitHub Actions workflow that runs on push/PR events - installs dependencies, sets up API keys as secrets, runs the evaluation script. (4) Implement threshold checking that fails the pipeline if metrics drop below configured thresholds. (5) Generate and store evaluation reports as CI artifacts. (6) Optionally run scheduled evaluations (e.g., weekly) to detect model drift.",
-      "context": [
-        "CI/CD for LLM evaluation requires: evaluation dataset, configured metrics with thresholds, automated pipeline (GitHub Actions), and threshold gates.",
-        "GitHub Actions workflow should: install dependencies, configure API keys from secrets, run evaluation scripts, check thresholds, and store reports as artifacts.",
-        "Threshold checking compares metric scores against configured minimum values and fails the pipeline if any metric falls below its threshold.",
-        "Scheduled evaluations (cron-based) detect model drift and quality degradation over time without requiring code changes.",
-        "Evaluation reports should be stored as artifacts and optionally published to monitoring dashboards for trend analysis."
-      ],
-      "retrieval_context": [
-        "CI/CD for LLM evaluation requires: evaluation dataset, configured metrics with thresholds, automated pipeline (GitHub Actions), and threshold gates.",
-        "GitHub Actions workflow should: install dependencies, configure API keys from secrets, run evaluation scripts, check thresholds, and store reports as artifacts.",
-        "Threshold checking compares metric scores against configured minimum values and fails the pipeline if any metric falls below its threshold.",
-        "Scheduled evaluations (cron-based) detect model drift and quality degradation over time without requiring code changes."
-      ]
-    },
-    {
-      "sample_id": "eval_rag_010",
-      "user_input": "What is answer relevancy metric and how is it measured?",
-      "expected_output": "Answer Relevancy measures how well the generated response addresses the original user question. In DeepEval, it uses the input and actual_output to determine if the response is pertinent to the query. In RAGAS, it generates multiple questions from the answer and measures cosine similarity between those generated questions and the original question. A high answer relevancy score indicates the response directly addresses what was asked without including excessive irrelevant information. This metric penalizes responses that are off-topic, overly verbose with tangential details, or that fail to address the core question.",
-      "context": [
-        "Answer Relevancy measures how well the generated answer addresses the user's original question.",
-        "In RAGAS, answer relevancy is computed by generating questions from the answer and measuring cosine similarity with the original question.",
-        "In DeepEval, AnswerRelevancyMetric requires input and actual_output to evaluate response pertinence.",
-        "High answer relevancy means the response directly addresses the question without excessive irrelevant information.",
-        "Answer relevancy penalizes off-topic responses, overly verbose answers, and responses that fail to address the core query."
-      ],
-      "retrieval_context": [
-        "Answer Relevancy measures how well the generated answer addresses the user's original question.",
-        "In RAGAS, answer relevancy is computed by generating questions from the answer and measuring cosine similarity with the original question.",
-        "In DeepEval, AnswerRelevancyMetric requires input and actual_output to evaluate response pertinence.",
-        "High answer relevancy means the response directly addresses the question without excessive irrelevant information."
-      ]
-    },
-    {
-      "sample_id": "eval_rag_011",
-      "user_input": "What are the best practices for production RAG systems?",
-      "expected_output": "Best practices for production RAG systems include: (1) Chunking optimization - use recursive character splitting with appropriate chunk sizes (500-1500 chars) and overlap (10-20%). (2) Embedding model selection - choose models matching your domain and dimension requirements. (3) Vector store configuration - use appropriate index types (IVF for large datasets, Flat for small). (4) Retrieval tuning - optimize top-k, similarity thresholds, and consider hybrid search (dense + sparse). (5) Prompt engineering - design system prompts that instruct the LLM to use only retrieved context. (6) Evaluation pipeline - continuous monitoring with faithfulness, relevancy, and precision metrics. (7) Error handling - graceful degradation when retrieval fails or returns low-quality results.",
-      "context": [
-        "Production RAG best practices: optimize chunk size (500-1500 chars), use appropriate overlap (10-20%), select domain-appropriate embedding models.",
-        "Vector store selection matters: use Flat indexes for <100K vectors, IVF for 100K-10M, and HNSW for real-time requirements.",
-        "Retrieval tuning involves: setting appropriate top-k (3-10), configuring similarity thresholds (0.7+), and considering hybrid search combining dense and sparse retrieval.",
-        "System prompts should explicitly instruct the LLM to ground responses in retrieved context and acknowledge when information is insufficient.",
-        "Continuous evaluation with automated metrics (faithfulness, answer relevancy, context precision) catches quality regressions before they reach users.",
-        "Error handling: implement fallbacks for empty retrieval results, low-confidence responses, and API failures."
-      ],
-      "retrieval_context": [
-        "Production RAG best practices: optimize chunk size (500-1500 chars), use appropriate overlap (10-20%), select domain-appropriate embedding models.",
-        "Retrieval tuning involves: setting appropriate top-k (3-10), configuring similarity thresholds (0.7+), and considering hybrid search combining dense and sparse retrieval.",
-        "System prompts should explicitly instruct the LLM to ground responses in retrieved context and acknowledge when information is insufficient.",
-        "Continuous evaluation with automated metrics (faithfulness, answer relevancy, context precision) catches quality regressions before they reach users."
-      ]
-    },
-    {
-      "sample_id": "eval_rag_012",
-      "user_input": "How does DeepEval evaluate RAG pipelines?",
-      "expected_output": "DeepEval evaluates RAG pipelines using LLMTestCase objects and specialized metrics. Each test case contains: input (user query), actual_output (LLM response), expected_output (ground truth answer), context (ground truth facts for hallucination detection), and retrieval_context (documents retrieved by RAG for faithfulness checking). Key metrics include: AnswerRelevancyMetric (input + actual_output), FaithfulnessMetric (checks actual_output against retrieval_context), ContextualPrecisionMetric (evaluates retrieval_context relevance with expected_output), ContextualRecallMetric (checks if retrieval_context covers expected_output), and HallucinationMetric (checks actual_output against ground truth context). Each metric uses LLM-as-a-Judge to score 0-1 with a configurable threshold.",
-      "context": [
-        "DeepEval uses LLMTestCase with fields: input, actual_output, expected_output, context (ground truth), retrieval_context (RAG-retrieved docs).",
-        "AnswerRelevancyMetric requires: input and actual_output. Measures if response addresses the question.",
-        "FaithfulnessMetric requires: input, actual_output, and retrieval_context. Checks if claims are supported by retrieved docs.",
-        "ContextualPrecisionMetric requires: input, expected_output, and retrieval_context. Evaluates if retrieved docs are relevant.",
-        "ContextualRecallMetric requires: input, expected_output, and retrieval_context. Checks if all needed info was retrieved.",
-        "HallucinationMetric requires: input, actual_output, and context (ground truth). Detects factual contradictions.",
-        "All metrics use LLM-as-a-Judge scoring from 0 to 1, with configurable pass/fail thresholds."
-      ],
-      "retrieval_context": [
-        "DeepEval uses LLMTestCase with fields: input, actual_output, expected_output, context (ground truth), retrieval_context (RAG-retrieved docs).",
-        "AnswerRelevancyMetric requires: input and actual_output. Measures if response addresses the question.",
-        "FaithfulnessMetric requires: input, actual_output, and retrieval_context. Checks if claims are supported by retrieved docs.",
-        "ContextualPrecisionMetric requires: input, expected_output, and retrieval_context. Evaluates if retrieved docs are relevant.",
-        "HallucinationMetric requires: input, actual_output, and context (ground truth). Detects factual contradictions."
-      ]
-    },
-    {
-      "sample_id": "eval_rag_013",
-      "user_input": "What is synthetic test data generation for RAG evaluation?",
-      "expected_output": "Synthetic test data generation creates evaluation datasets automatically from source documents without manual annotation. RAGAS provides a TestsetGenerator that: (1) Takes source documents as input, (2) Builds a knowledge graph from the documents to understand relationships, (3) Generates diverse questions of varying complexity (simple factual, multi-hop reasoning, abstract), (4) Creates reference answers and identifies relevant contexts for each question. This automation enables creating large evaluation datasets quickly, covering edge cases that manual creation might miss. The generated testset includes user_input, reference (expected answer), and reference_contexts for computing all standard metrics.",
-      "context": [
-        "RAGAS TestsetGenerator creates synthetic evaluation datasets from source documents without manual annotation.",
-        "The generation process: parse documents, build knowledge graph, generate diverse questions, create reference answers with contexts.",
-        "Generated questions cover multiple complexity levels: simple factual, multi-hop reasoning, and abstract/conceptual.",
-        "Synthetic datasets enable large-scale evaluation covering edge cases that manual creation might miss.",
-        "Generated testset includes: user_input, reference (expected answer), reference_contexts (source passages for the answer)."
-      ],
-      "retrieval_context": [
-        "RAGAS TestsetGenerator creates synthetic evaluation datasets from source documents without manual annotation.",
-        "The generation process: parse documents, build knowledge graph, generate diverse questions, create reference answers with contexts.",
-        "Generated questions cover multiple complexity levels: simple factual, multi-hop reasoning, and abstract/conceptual.",
-        "Generated testset includes: user_input, reference (expected answer), reference_contexts (source passages for the answer)."
-      ]
-    },
-    {
-      "sample_id": "eval_rag_014",
-      "user_input": "How do you handle evaluation when retrieval context is not available?",
-      "expected_output": "When retrieval_context is not available in the evaluation dataset, the evaluation pipeline should run the RAG pipeline on each sample's user_input to generate both the actual_output and retrieval_context dynamically. The pipeline: (1) Takes user_input from the dataset, (2) Runs it through the RAG pipeline to get retrieved documents and generated response, (3) Populates retrieval_context with the actually retrieved documents, (4) Populates actual_output with the generated response, (5) Then evaluates using the now-complete data. Metrics like AnswerRelevancy only need input+actual_output so they work regardless. Metrics like Faithfulness need retrieval_context which the pipeline provides. The Hallucination metric uses the ground truth context field which should always be in the dataset.",
-      "context": [
-        "When retrieval_context is null in the dataset, the evaluation pipeline must run the RAG system to generate both actual_output and retrieval_context.",
-        "The evaluation pipeline flow: load dataset, for each sample run RAG pipeline, populate actual_output and retrieval_context, then evaluate with metrics.",
-        "AnswerRelevancy only needs input and actual_output, so it works even without pre-defined retrieval_context.",
-        "Faithfulness and ContextualPrecision/Recall require retrieval_context, which the pipeline provides by running the RAG system.",
-        "HallucinationMetric uses ground truth context (always in dataset), not retrieval_context.",
-        "This approach evaluates the end-to-end RAG pipeline including both retrieval quality and generation quality."
-      ],
-      "retrieval_context": [
-        "When retrieval_context is null in the dataset, the evaluation pipeline must run the RAG system to generate both actual_output and retrieval_context.",
-        "The evaluation pipeline flow: load dataset, for each sample run RAG pipeline, populate actual_output and retrieval_context, then evaluate with metrics.",
-        "AnswerRelevancy only needs input and actual_output, so it works even without pre-defined retrieval_context.",
-        "Faithfulness and ContextualPrecision/Recall require retrieval_context, which the pipeline provides by running the RAG system."
-      ]
-    },
-    {
-      "sample_id": "eval_rag_015",
-      "user_input": "What is the role of temperature in LLM generation for RAG?",
-      "expected_output": "Temperature controls the randomness of LLM token selection during generation. For RAG systems, a temperature of 0.0 (or very low like 0.1) is recommended because: (1) RAG responses should be deterministic and factual, grounded in retrieved context. (2) Higher temperatures introduce randomness that can lead to hallucinations or creative deviations from the retrieved information. (3) Low temperature ensures consistent, reproducible responses for the same query and context. (4) For evaluation, temperature=0.0 is essential to get deterministic results that can be reliably compared across runs. However, for creative tasks or when diversity is desired, slightly higher temperatures (0.3-0.5) may be appropriate.",
-      "context": [
-        "Temperature controls randomness in LLM token selection: 0.0 is deterministic, 1.0+ is highly random.",
-        "For RAG systems, temperature 0.0 or very low (0.1) is recommended to ensure factual, grounded responses.",
-        "Higher temperatures can cause hallucinations by allowing the LLM to deviate creatively from retrieved context.",
-        "For evaluation runs, temperature=0.0 ensures deterministic, reproducible results across evaluation iterations.",
-        "Production RAG systems typically use temperature 0.0-0.2 for factual responses and 0.3-0.5 for creative/conversational applications."
-      ],
-      "retrieval_context": [
-        "Temperature controls randomness in LLM token selection: 0.0 is deterministic, 1.0+ is highly random.",
-        "For RAG systems, temperature 0.0 or very low (0.1) is recommended to ensure factual, grounded responses.",
-        "Higher temperatures can cause hallucinations by allowing the LLM to deviate creatively from retrieved context.",
-        "For evaluation runs, temperature=0.0 ensures deterministic, reproducible results across evaluation iterations."
-      ]
-    },
-    {
-      "sample_id": "eval_hallucination_001",
-      "user_input": "When was Python programming language created?",
-      "expected_output": "Python was first released in 1991 by Guido van Rossum. It was conceived in the late 1980s as a successor to the ABC programming language.",
-      "context": [
-        "Python was first released in 1991 by Guido van Rossum.",
-        "Python was conceived in the late 1980s as a successor to the ABC language.",
-        "Guido van Rossum started working on Python at Centrum Wiskunde & Informatica (CWI) in the Netherlands."
-      ],
-      "retrieval_context": [
-        "Python is a high-level programming language first released in 1991.",
-        "Guido van Rossum created Python as a successor to ABC programming language.",
-        "Python emphasizes code readability and supports multiple programming paradigms."
-      ]
-    },
-    {
-      "sample_id": "eval_hallucination_002",
-      "user_input": "What company developed the BERT model?",
-      "expected_output": "BERT (Bidirectional Encoder Representations from Transformers) was developed by Google AI Research and published in 2018. It introduced bidirectional pre-training for language understanding tasks.",
-      "context": [
-        "BERT was developed by Google AI Research team and published in October 2018.",
-        "BERT stands for Bidirectional Encoder Representations from Transformers.",
-        "BERT introduced the concept of bidirectional pre-training using masked language modeling."
-      ],
-      "retrieval_context": [
-        "BERT (Bidirectional Encoder Representations from Transformers) is a transformer-based model developed by Google.",
-        "BERT was published in 2018 and revolutionized NLP by enabling bidirectional context understanding.",
-        "The BERT paper was authored by Jacob Devlin, Ming-Wei Chang, Kenton Lee, and Kristina Toutanova at Google."
-      ]
-    },
-    {
-      "sample_id": "eval_precision_001",
-      "user_input": "What are the main components of a transformer architecture?",
-      "expected_output": "The main components of a transformer architecture are: (1) Multi-head self-attention mechanism that allows the model to attend to different parts of the input simultaneously, (2) Feed-forward neural networks applied to each position, (3) Layer normalization for training stability, (4) Positional encoding to inject sequence order information since transformers process tokens in parallel, (5) Residual connections that enable gradient flow through deep networks. The encoder processes input and the decoder generates output, with cross-attention connecting them.",
-      "context": [
-        "Transformer architecture key components: multi-head self-attention, feed-forward networks, layer normalization, positional encoding, and residual connections.",
-        "Self-attention mechanism allows each token to attend to all other tokens in the sequence, capturing long-range dependencies.",
-        "Positional encoding adds sequence order information since transformers process all tokens in parallel (no recurrence).",
-        "The encoder-decoder structure uses cross-attention to connect encoder representations with decoder generation."
-      ],
-      "retrieval_context": [
-        "Transformer architecture key components: multi-head self-attention, feed-forward networks, layer normalization, positional encoding, and residual connections.",
-        "Self-attention mechanism allows each token to attend to all other tokens in the sequence, capturing long-range dependencies.",
-        "Positional encoding adds sequence order information since transformers process all tokens in parallel (no recurrence).",
-        "Convolutional neural networks use filters to extract local features from input data.",
-        "Recurrent neural networks process sequences one token at a time maintaining hidden state."
-      ]
-    },
-    {
-      "sample_id": "eval_precision_002",
-      "user_input": "How does cosine similarity work for comparing vectors?",
-      "expected_output": "Cosine similarity measures the cosine of the angle between two vectors in multi-dimensional space. It is computed as the dot product of two vectors divided by the product of their magnitudes: cos(theta) = (A dot B) / (||A|| * ||B||). The result ranges from -1 (completely opposite) to 1 (identical direction), with 0 indicating orthogonality (no similarity). In NLP and RAG systems, cosine similarity is preferred over Euclidean distance because it measures orientation rather than magnitude, making it robust to vectors of different lengths.",
-      "context": [
-        "Cosine similarity measures the cosine of the angle between two vectors: cos(theta) = (A dot B) / (||A|| * ||B||).",
-        "Values range from -1 (opposite) to 1 (identical direction), with 0 meaning orthogonal/no similarity.",
-        "Cosine similarity is preferred in NLP because it measures direction (semantic meaning) rather than magnitude (vector length).",
-        "For normalized vectors (unit length), cosine similarity equals the dot product, which is what FAISS IndexFlatIP computes."
-      ],
-      "retrieval_context": [
-        "Cosine similarity measures the cosine of the angle between two vectors: cos(theta) = (A dot B) / (||A|| * ||B||).",
-        "Values range from -1 (opposite) to 1 (identical direction), with 0 meaning orthogonal/no similarity.",
-        "Cosine similarity is preferred in NLP because it measures direction (semantic meaning) rather than magnitude (vector length).",
-        "For normalized vectors (unit length), cosine similarity equals the dot product, which is what FAISS IndexFlatIP computes."
-      ]
-    },
-    {
-      "sample_id": "eval_recall_001",
-      "user_input": "What are the different types of RAG architectures?",
-      "expected_output": "The main types of RAG architectures are: (1) Naive RAG - simple retrieve-then-generate with a single retrieval step. (2) Advanced RAG - adds pre-retrieval query optimization (HyDE, query expansion) and post-retrieval processing (reranking, compression). (3) Modular RAG - decomposes into pluggable modules (retriever, reranker, generator, router) that can be mixed and matched. (4) Agentic RAG - uses AI agents that decide when and what to retrieve dynamically based on query complexity. (5) Graph RAG - combines knowledge graphs with vector retrieval for structured reasoning.",
-      "context": [
-        "Naive RAG: simple retrieve-then-generate pipeline with single retrieval step. Limited by retrieval quality.",
-        "Advanced RAG: adds pre-retrieval (query rewriting, HyDE) and post-retrieval (reranking, context compression) optimization steps.",
-        "Modular RAG: decomposes into pluggable components (retriever, reranker, generator, router) for flexibility.",
-        "Agentic RAG: uses AI agents to dynamically decide retrieval strategy based on query complexity and type.",
-        "Graph RAG: combines knowledge graphs with vector retrieval for structured reasoning and multi-hop queries."
-      ],
-      "retrieval_context": [
-        "Naive RAG: simple retrieve-then-generate pipeline with single retrieval step. Limited by retrieval quality.",
-        "Advanced RAG: adds pre-retrieval (query rewriting, HyDE) and post-retrieval (reranking, context compression) optimization steps.",
-        "Modular RAG: decomposes into pluggable components (retriever, reranker, generator, router) for flexibility."
+        "While the most recent Large Language Models capture enough knowledge to rival human performance across a wide variety of question answering benchmarks, the idea of using LLMs as knowledge bases still has two fundamental limitations.",
+        "First, LLMs are not able to answer questions about events that have happened after they were trained. Second, even the largest models struggle to memorise knowledge that is only rarely mentioned in the training corpus.",
+        "The standard solution to these issues is to rely on Retrieval Augmented Generation (RAG). Answering a question then essentially involves retrieving relevant passages from a corpus and feeding these passages, along with the original question, to the LM.",
+        "Recent work has suggested that simply adding retrieved documents to the input of a standard LM can also work well, thus making it possible to use retrieval-augmented strategies in combination with LLMs that are only available through APIs."
       ]
     }
   ]
