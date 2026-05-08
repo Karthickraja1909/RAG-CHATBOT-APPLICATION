@@ -77,7 +77,7 @@ class RAGPipeline:
             raise
         except Exception as e:
             raise PipelineError(
-                f"RAG pipeline failed: {e}",
+                f"RAG pipeline failed: {type(e).__name__}: {e}",
                 details={"query": request.query},
             )
 

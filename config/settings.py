@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     # ─── LLM Configuration ────────────────────────────────────────
     openai_api_key: str = Field(default="", description="OpenAI API key")
     openai_model: str = Field(default="gpt-4o-mini", description="OpenAI model for generation")
-    openai_embedding_model: str = Field(default="text-embedding-3-small", description="Embedding model")
+    openai_embedding_model: str = Field(default="text-embedding-3-large", description="Embedding model")
     openai_temperature: float = Field(default=0.0, description="LLM temperature")
     openai_max_tokens: int = Field(default=1024, description="Max tokens for LLM response")
     openai_api_base: Optional[str] = Field(default=None, description="Custom OpenAI API base URL")
@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     openrouter_api_key: Optional[str] = Field(default=None, description="OpenRouter API key")
     openrouter_base_url: str = Field(default="https://openrouter.ai/api/v1", description="OpenRouter API base URL")
     openrouter_model: str = Field(default="openai/gpt-4o-mini", description="OpenRouter model identifier")
-    openrouter_embedding_model: str = Field(default="openai/text-embedding-3-small", description="OpenRouter embedding model")
+    openrouter_embedding_model: str = Field(default="openai/text-embedding-3-large", description="OpenRouter embedding model")
     use_openrouter: bool = Field(default=False, description="Use OpenRouter instead of direct OpenAI")
 
     # ─── Azure OpenAI (optional) ──────────────────────────────────
@@ -72,7 +72,7 @@ class Settings(BaseSettings):
 
     # ─── Evaluation Configuration ─────────────────────────────────
     eval_model: str = Field(default="gpt-4o-mini", description="Model for LLM-as-a-Judge evaluation")
-    eval_embedding_model: str = Field(default="text-embedding-3-small", description="Embedding model for eval")
+    eval_embedding_model: str = Field(default="text-embedding-3-large", description="Embedding model for eval")
     eval_threshold: float = Field(default=0.7, description="Minimum pass threshold for metrics")
     eval_dataset_path: str = Field(default="data/evaluation/eval_dataset.json", description="Evaluation dataset")
     eval_results_path: str = Field(default="data/evaluation/results", description="Evaluation results directory")
