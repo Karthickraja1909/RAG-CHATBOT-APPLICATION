@@ -1,0 +1,81 @@
+
+
+name: LLM Evaluation Pipeline (Scheduled)
+
+on:
+  schedule:
+    # Run evaluation every Monday at 6 AM UTC
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+    inputs:
+      eval_framework:
+        description: "Evaluation framework"
+        required: true
+        default: "both"
+        type: choice
+        options:
+          - "deepeval"
+          - "ragas"
+          - "both"
+      threshold:
+        description: "Pass threshold (0.0 - 1.0)"
+        required: false
+        default: "0.7"
+
+env:
+  PYTHON_VERSION: "3.11"
+  WORKING_DIRECTORY: "genai_rag_system"
+
+jobs:
+  scheduled-evaluation:
+    name: Scheduled LLM Evaluation
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run evaluation pipeline
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          EVAL_MODEL: ${{ vars.EVAL_MODEL || 'gpt-4o-mini' }}
+          EVAL_THRESHOLD: ${{ github.event.inputs.threshold || '0.7' }}
+          EVAL_RESULTS_PATH: "artifacts/evaluation"
+        run: |
+          FRAMEWORK="${{ github.event.inputs.eval_framework || 'both' }}"
+          python -m scripts.run_evaluation \
+            --framework $FRAMEWORK \
+            --dataset-path data/evaluation/eval_dataset.json \
+            --output-dir artifacts/evaluation
+
+      - name: Check thresholds and generate report
+        env:
+          EVAL_THRESHOLD: ${{ github.event.inputs.threshold || '0.7' }}
+        run: |
+          python -m scripts.check_thresholds \
+            --results-dir artifacts/evaluation \
+            --threshold $EVAL_THRESHOLD
+
+      - name: Upload evaluation artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scheduled-eval-${{ github.run_number }}
+          path: ${{ env.WORKING_DIRECTORY }}/artifacts/evaluation/
+          retention-days: 30
+
+
