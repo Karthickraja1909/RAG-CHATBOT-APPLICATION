@@ -12,139 +12,149 @@ from utils.exceptions import VectorStoreError
 
 
 class TestFAISSVectorStore:
-    """Tests for FAISSVectorStore class."""
+    """Tests for FAISSVectorStore class."""
 
-    @pytest.fixture
-    def mock_embedding_service(self):
-        """Mock embedding service."""
-        mock = MagicMock()
-        mock.embed_text.return_value = [0.1] * 1536
-        mock.embed_texts.return_value = [[0.1] * 1536, [0.2] * 1536]
-        return mock
+    @pytest.fixture(autouse=True)
+    def patch_settings(self):
+        """Patch settings to use 1536 dimension for tests."""
+        with patch("vectordb.faiss_store.get_settings") as mock_settings:
+            settings = MagicMock()
+            settings.embedding_dimension = 1536
+            settings.faiss_index_path = "test_index"
+            mock_settings.return_value = settings
+            yield
 
-    @pytest.fixture
-    def sample_chunks(self):
-        """Create sample document chunks."""
-        return [
-            DocumentChunk(
-                chunk_id="chunk_001",
-                document_id="doc_001",
-                content="RAG combines retrieval with generation for accurate responses.",
-                metadata=DocumentMetadata(
-                    source="doc1.txt", file_type=".txt", chunk_index=0, total_chunks=1
-                ),
-            ),
-            DocumentChunk(
-                chunk_id="chunk_002",
-                document_id="doc_001",
-                content="FAISS enables efficient vector similarity search at scale.",
-                metadata=DocumentMetadata(
-                    source="doc1.txt", file_type=".txt", chunk_index=1, total_chunks=2
-                ),
-            ),
-        ]
+    @pytest.fixture
+    def mock_embedding_service(self):
+        """Mock embedding service."""
+        mock = MagicMock()
+        mock.embed_text.return_value = [0.1] * 1536
+        mock.embed_texts.return_value = [[0.1] * 1536, [0.2] * 1536]
+        return mock
 
-    @patch("vectordb.faiss_store.EmbeddingService")
-    def test_add_chunks(self, mock_emb_class, mock_embedding_service, sample_chunks, tmp_path):
-        """Test adding chunks to vector store."""
-        mock_emb_class.return_value = mock_embedding_service
+    @pytest.fixture
+    def sample_chunks(self):
+        """Create sample document chunks."""
+        return [
+            DocumentChunk(
+                chunk_id="chunk_001",
+                document_id="doc_001",
+                content="RAG combines retrieval with generation for accurate responses.",
+                metadata=DocumentMetadata(
+                    source="doc1.txt", file_type=".txt", chunk_index=0, total_chunks=1
+                ),
+            ),
+            DocumentChunk(
+                chunk_id="chunk_002",
+                document_id="doc_001",
+                content="FAISS enables efficient vector similarity search at scale.",
+                metadata=DocumentMetadata(
+                    source="doc1.txt", file_type=".txt", chunk_index=1, total_chunks=2
+                ),
+            ),
+        ]
 
-        from vectordb.faiss_store import FAISSVectorStore
+    @patch("vectordb.faiss_store.EmbeddingService")
+    def test_add_chunks(self, mock_emb_class, mock_embedding_service, sample_chunks, tmp_path):
+        """Test adding chunks to vector store."""
+        mock_emb_class.return_value = mock_embedding_service
 
-        store = FAISSVectorStore(
-            embedding_service=mock_embedding_service,
-            index_path=str(tmp_path / "test_index"),
-        )
+        from vectordb.faiss_store import FAISSVectorStore
 
-        count = store.add_chunks(sample_chunks)
+        store = FAISSVectorStore(
+            embedding_service=mock_embedding_service,
+            index_path=str(tmp_path / "test_index"),
+        )
 
-        assert count == 2
-        assert store._index.ntotal == 2
-        mock_embedding_service.embed_texts.assert_called_once()
+        count = store.add_chunks(sample_chunks)
 
-    @patch("vectordb.faiss_store.EmbeddingService")
-    def test_search(self, mock_emb_class, mock_embedding_service, sample_chunks, tmp_path):
-        """Test searching the vector store."""
-        mock_emb_class.return_value = mock_embedding_service
+        assert count == 2
+        assert store._index.ntotal == 2
+        mock_embedding_service.embed_texts.assert_called_once()
 
-        from vectordb.faiss_store import FAISSVectorStore
+    @patch("vectordb.faiss_store.EmbeddingService")
+    def test_search(self, mock_emb_class, mock_embedding_service, sample_chunks, tmp_path):
+        """Test searching the vector store."""
+        mock_emb_class.return_value = mock_embedding_service
 
-        store = FAISSVectorStore(
-            embedding_service=mock_embedding_service,
-            index_path=str(tmp_path / "test_index"),
-        )
-        store.add_chunks(sample_chunks)
+        from vectordb.faiss_store import FAISSVectorStore
 
-        results = store.search("What is RAG?", top_k=2, threshold=0.0)
+        store = FAISSVectorStore(
+            embedding_service=mock_embedding_service,
+            index_path=str(tmp_path / "test_index"),
+        )
+        store.add_chunks(sample_chunks)
 
-        assert len(results) > 0
-        assert results[0].content in [c.content for c in sample_chunks]
+        results = store.search("What is RAG?", top_k=2, threshold=0.0)
 
-    @patch("vectordb.faiss_store.EmbeddingService")
-    def test_search_empty_store(self, mock_emb_class, mock_embedding_service, tmp_path):
-        """Test searching an empty store returns empty results."""
-        mock_emb_class.return_value = mock_embedding_service
+        assert len(results) > 0
+        assert results[0].content in [c.content for c in sample_chunks]
 
-        from vectordb.faiss_store import FAISSVectorStore
+    @patch("vectordb.faiss_store.EmbeddingService")
+    def test_search_empty_store(self, mock_emb_class, mock_embedding_service, tmp_path):
+        """Test searching an empty store returns empty results."""
+        mock_emb_class.return_value = mock_embedding_service
 
-        store = FAISSVectorStore(
-            embedding_service=mock_embedding_service,
-            index_path=str(tmp_path / "test_index"),
-        )
+        from vectordb.faiss_store import FAISSVectorStore
 
-        results = store.search("query")
-        assert results == []
+        store = FAISSVectorStore(
+            embedding_service=mock_embedding_service,
+            index_path=str(tmp_path / "test_index"),
+        )
 
-    @patch("vectordb.faiss_store.EmbeddingService")
-    def test_get_stats(self, mock_emb_class, mock_embedding_service, sample_chunks, tmp_path):
-        """Test getting vector store statistics."""
-        mock_emb_class.return_value = mock_embedding_service
+        results = store.search("query")
+        assert results == []
 
-        from vectordb.faiss_store import FAISSVectorStore
+    @patch("vectordb.faiss_store.EmbeddingService")
+    def test_get_stats(self, mock_emb_class, mock_embedding_service, sample_chunks, tmp_path):
+        """Test getting vector store statistics."""
+        mock_emb_class.return_value = mock_embedding_service
 
-        store = FAISSVectorStore(
-            embedding_service=mock_embedding_service,
-            index_path=str(tmp_path / "test_index"),
-        )
-        store.add_chunks(sample_chunks)
+        from vectordb.faiss_store import FAISSVectorStore
 
-        stats = store.get_stats()
+        store = FAISSVectorStore(
+            embedding_service=mock_embedding_service,
+            index_path=str(tmp_path / "test_index"),
+        )
+        store.add_chunks(sample_chunks)
 
-        assert stats["total_vectors"] == 2
-        assert stats["dimension"] == 1536
-        assert stats["total_documents"] == 1
+        stats = store.get_stats()
 
-    @patch("vectordb.faiss_store.EmbeddingService")
-    def test_clear_store(self, mock_emb_class, mock_embedding_service, sample_chunks, tmp_path):
-        """Test clearing the vector store."""
-        mock_emb_class.return_value = mock_embedding_service
+        assert stats["total_vectors"] == 2
+        assert stats["dimension"] == 1536
+        assert stats["total_documents"] == 1
 
-        from vectordb.faiss_store import FAISSVectorStore
+    @patch("vectordb.faiss_store.EmbeddingService")
+    def test_clear_store(self, mock_emb_class, mock_embedding_service, sample_chunks, tmp_path):
+        """Test clearing the vector store."""
+        mock_emb_class.return_value = mock_embedding_service
 
-        store = FAISSVectorStore(
-            embedding_service=mock_embedding_service,
-            index_path=str(tmp_path / "test_index"),
-        )
-        store.add_chunks(sample_chunks)
-        store.clear()
+        from vectordb.faiss_store import FAISSVectorStore
 
-        assert store._index.ntotal == 0
-        assert store._metadata_store == []
+        store = FAISSVectorStore(
+            embedding_service=mock_embedding_service,
+            index_path=str(tmp_path / "test_index"),
+        )
+        store.add_chunks(sample_chunks)
+        store.clear()
 
-    @patch("vectordb.faiss_store.EmbeddingService")
-    def test_delete_by_document_id(self, mock_emb_class, mock_embedding_service, sample_chunks, tmp_path):
-        """Test deleting chunks by document ID."""
-        mock_emb_class.return_value = mock_embedding_service
+        assert store._index.ntotal == 0
+        assert store._metadata_store == []
 
-        from vectordb.faiss_store import FAISSVectorStore
+    @patch("vectordb.faiss_store.EmbeddingService")
+    def test_delete_by_document_id(self, mock_emb_class, mock_embedding_service, sample_chunks, tmp_path):
+        """Test deleting chunks by document ID."""
+        mock_emb_class.return_value = mock_embedding_service
 
-        store = FAISSVectorStore(
-            embedding_service=mock_embedding_service,
-            index_path=str(tmp_path / "test_index"),
-        )
-        store.add_chunks(sample_chunks)
+        from vectordb.faiss_store import FAISSVectorStore
 
-        removed = store.delete_by_document_id("doc_001")
+        store = FAISSVectorStore(
+            embedding_service=mock_embedding_service,
+            index_path=str(tmp_path / "test_index"),
+        )
+        store.add_chunks(sample_chunks)
 
-        assert removed == 2
-        assert store._index.ntotal == 0
+        removed = store.delete_by_document_id("doc_001")
+
+        assert removed == 2
+        assert store._index.ntotal == 0

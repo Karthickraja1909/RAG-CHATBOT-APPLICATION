@@ -9,13 +9,7 @@ import uuid
 from typing import Optional
 
 from config.settings import get_settings
-from schemas.evaluation import (
-    EvaluationDataset,
-    EvaluationReport,
-    EvaluationResult,
-    EvaluationSample,
-    MetricResult,
-)
+from schemas.evaluation import EvaluationDataset, EvaluationReport, EvaluationResult, EvaluationSample, MetricResult
 from utils.exceptions import EvaluationError
 from utils.logger import get_logger
 
