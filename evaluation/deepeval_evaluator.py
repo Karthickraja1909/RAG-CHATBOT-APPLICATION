@@ -62,6 +62,9 @@ class DeepEvalEvaluator:
                 eval_model = self.settings.openrouter_model
                 logger.info(f"DeepEval configured for OpenRouter: {eval_model}")
 
+            # Truncate retrieval contexts to reduce token usage in metric evaluation
+            self._max_context_chars = 1500  # ~375 tokens per context chunk
+
             metric_map = {
                 "answer_relevancy": lambda: AnswerRelevancyMetric(
                     threshold=self.threshold,
@@ -166,12 +169,17 @@ class DeepEvalEvaluator:
                 f"Sample {sample.sample_id} has no actual_output for evaluation"
             )
 
+        # Truncate contexts to reduce token usage (avoids 402 credit errors on OpenRouter)
+        max_chars = getattr(self, "_max_context_chars", 1500)
+        retrieval_context = [c[:max_chars] for c in (sample.retrieval_context or [])][:3]
+        context = [c[:max_chars] for c in (sample.context or [])][:3] if sample.context else None
+
         test_case = LLMTestCase(
             input=sample.user_input,
-            actual_output=sample.actual_output,
-            expected_output=sample.expected_output,
-            context=sample.context,
-            retrieval_context=sample.retrieval_context,
+            actual_output=sample.actual_output[:2000],
+            expected_output=sample.expected_output[:2000] if sample.expected_output else None,
+            context=context,
+            retrieval_context=retrieval_context,
         )
 
         metric_results = []

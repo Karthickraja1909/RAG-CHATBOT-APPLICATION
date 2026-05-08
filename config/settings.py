@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     openai_model: str = Field(default="gpt-4o-mini", description="OpenAI model for generation")
     openai_embedding_model: str = Field(default="text-embedding-3-large", description="Embedding model")
     openai_temperature: float = Field(default=0.0, description="LLM temperature")
-    openai_max_tokens: int = Field(default=1024, description="Max tokens for LLM response")
+    openai_max_tokens: int = Field(default=512, description="Max tokens for LLM response")
     openai_api_base: Optional[str] = Field(default=None, description="Custom OpenAI API base URL")
     openai_api_version: Optional[str] = Field(default=None, description="OpenAI API version (Azure)")
 
