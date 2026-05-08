@@ -71,7 +71,7 @@ class Settings(BaseSettings):
     system_prompt_path: str = Field(default="config/prompts/system_prompt.txt", description="System prompt file")
 
     # ─── Evaluation Configuration ─────────────────────────────────
-    eval_model: str = Field(default="gpt-4o-mini", description="Model for LLM-as-a-Judge evaluation")
+    eval_model: str = Field(default="openai/gpt-oss-120b:free", description="Model for LLM-as-a-Judge evaluation")
     eval_embedding_model: str = Field(default="text-embedding-3-small", description="Embedding model for eval")
     eval_threshold: float = Field(default=0.7, description="Minimum pass threshold for metrics")
     eval_dataset_path: str = Field(default="data/evaluation/eval_dataset.json", description="Evaluation dataset")
