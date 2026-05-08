@@ -8,12 +8,19 @@ import time
 import uuid
 from typing import Optional
 
+import openai
+
 from config.settings import get_settings
 from schemas.evaluation import EvaluationDataset, EvaluationReport, EvaluationResult, EvaluationSample, MetricResult
 from utils.exceptions import EvaluationError
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+class _CreditExhausted(Exception):
+    """Raised when OpenRouter returns 402 (insufficient credits)."""
+    pass
 
 
 class DeepEvalEvaluator:
@@ -49,21 +56,56 @@ class DeepEvalEvaluator:
                 HallucinationMetric,
             )
             from deepeval.metrics import BiasMetric, ToxicityMetric
+            from deepeval.models import DeepEvalBaseLLM
             from deepeval.test_case import LLMTestCaseParams
 
-            # Determine eval model for DeepEval
-            # DeepEval uses OPENAI_API_KEY env var by default.
-            # For OpenRouter: set OPENAI_API_KEY and OPENAI_API_BASE_URL env vars
-            eval_model = self.model
+            # ── Build a custom model wrapper that caps max_tokens ──
+            # DeepEval's default GPTModel requests max_tokens=16384 for gpt-4o-mini,
+            # which exceeds OpenRouter free-tier credit limits.
+            eval_model_name = self.model
+            eval_model = None  # Will be a DeepEvalBaseLLM instance or a string
+
             if self.settings.use_openrouter and self.settings.openrouter_api_key:
                 import os
                 os.environ["OPENAI_API_KEY"] = self.settings.openrouter_api_key
                 os.environ["OPENAI_BASE_URL"] = self.settings.openrouter_base_url
-                eval_model = self.settings.openrouter_model
-                logger.info(f"DeepEval configured for OpenRouter: {eval_model}")
+                eval_model_name = self.settings.openrouter_model
 
-            # Truncate retrieval contexts to reduce token usage in metric evaluation
-            self._max_context_chars = 1500  # ~375 tokens per context chunk
+                # Custom model wrapper to control max_tokens
+                class _TokenCappedModel(DeepEvalBaseLLM):
+                    def __init__(self, model_name, api_key, base_url, max_tokens=256):
+                        self._model_name = model_name
+                        self._max_tokens = max_tokens
+                        self._client = openai.OpenAI(api_key=api_key, base_url=base_url)
+                        super().__init__(model_name)
+
+                    def load_model(self):
+                        return self._model_name
+
+                    def generate(self, prompt: str, schema=None) -> str:
+                        resp = self._client.chat.completions.create(
+                            model=self._model_name,
+                            messages=[{"role": "user", "content": prompt}],
+                            max_tokens=self._max_tokens,
+                            temperature=0.0,
+                        )
+                        return resp.choices[0].message.content
+
+                    async def a_generate(self, prompt: str, schema=None) -> str:
+                        return self.generate(prompt, schema)
+
+                    def get_model_name(self) -> str:
+                        return self._model_name
+
+                eval_model = _TokenCappedModel(
+                    model_name=eval_model_name,
+                    api_key=self.settings.openrouter_api_key,
+                    base_url=self.settings.openrouter_base_url,
+                    max_tokens=150,
+                )
+                logger.info(f"DeepEval configured for OpenRouter: {eval_model_name} (max_tokens=150)")
+            else:
+                eval_model = eval_model_name
 
             metric_map = {
                 "answer_relevancy": lambda: AnswerRelevancyMetric(
@@ -200,6 +242,16 @@ class DeepEvalEvaluator:
                 )
 
             except Exception as e:
+                error_str = str(e)
+                # Detect credit exhaustion (402) and abort immediately
+                if "402" in error_str and "credits" in error_str.lower():
+                    logger.error(f"OpenRouter credits exhausted at metric '{metric_name}'. Aborting evaluation.")
+                    metric_results.append(MetricResult(
+                        metric_name=metric_name, score=0.0, threshold=self.threshold,
+                        passed=False, reason="Credits exhausted",
+                    ))
+                    raise _CreditExhausted(error_str)
+
                 logger.error(f"Metric '{metric_name}' failed for sample {sample.sample_id}: {e}")
                 metric_results.append(MetricResult(
                     metric_name=metric_name,
@@ -238,6 +290,9 @@ class DeepEvalEvaluator:
             try:
                 result = self.evaluate_sample(sample)
                 results.append(result)
+            except _CreditExhausted:
+                logger.warning(f"Stopping DeepEval evaluation early — credits exhausted after {len(results)} samples")
+                break
             except EvaluationError as e:
                 logger.error(f"Sample {sample.sample_id} evaluation failed: {e.message}")
 

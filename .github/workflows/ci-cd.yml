@@ -202,7 +202,7 @@ jobs:
           EVAL_THRESHOLD: ${{ vars.EVAL_THRESHOLD || '0.7' }}
           EVAL_FRAMEWORKS: ${{ steps.eval-config.outputs.framework }}
           EVAL_RUN_RAG_PIPELINE: "true"
-          EVAL_CUSTOM_METRICS_ENABLED: ${{ vars.EVAL_CUSTOM_METRICS_ENABLED || 'true' }}
+          EVAL_CUSTOM_METRICS_ENABLED: ${{ vars.EVAL_CUSTOM_METRICS_ENABLED || 'false' }}
           EVAL_RESULTS_PATH: "artifacts/evaluation"
           DEEPEVAL_METRICS: ${{ vars.DEEPEVAL_METRICS || 'answer_relevancy,faithfulness,contextual_precision,contextual_recall' }}
           RAGAS_METRICS: ${{ vars.RAGAS_METRICS || 'faithfulness,answer_relevancy,context_precision,context_recall' }}

@@ -22,6 +22,11 @@ from utils.logger import get_logger
 logger = get_logger(__name__)
 
 
+class _CreditExhausted(Exception):
+    """Raised when OpenRouter returns 402 (insufficient credits)."""
+    pass
+
+
 class RagasEvaluator:
     """
     Production-level evaluator using RAGAS framework.
@@ -64,7 +69,7 @@ class RagasEvaluator:
                     api_key=self.settings.openrouter_api_key,
                     base_url=self.settings.openrouter_base_url,
                     temperature=0.0,
-                    max_tokens=1024,
+                    max_tokens=150,
                 )
                 embeddings = OpenAIEmbeddings(
                     model=self.settings.eval_embedding_model,
@@ -93,6 +98,7 @@ class RagasEvaluator:
                     model=self.model,
                     api_key=self.settings.openai_api_key,
                     temperature=0.0,
+                    max_tokens=150,
                 )
                 embeddings = OpenAIEmbeddings(
                     model=self.settings.eval_embedding_model,
@@ -152,12 +158,17 @@ class RagasEvaluator:
                 f"Sample {sample.sample_id} has no actual_output for evaluation"
             )
 
+        # Truncate contexts to reduce token usage (avoids 402 credit errors on OpenRouter)
+        max_chars = 1500
+        retrieved_contexts = [c[:max_chars] for c in (sample.retrieval_context or [])][:3]
+        reference_contexts = [c[:max_chars] for c in (sample.context or [])][:3] if sample.context else []
+
         ragas_sample = SingleTurnSample(
             user_input=sample.user_input,
-            response=sample.actual_output,
-            reference=sample.expected_output or "",
-            retrieved_contexts=sample.retrieval_context or [],
-            reference_contexts=sample.context or [],
+            response=sample.actual_output[:2000],
+            reference=sample.expected_output[:2000] if sample.expected_output else "",
+            retrieved_contexts=retrieved_contexts,
+            reference_contexts=reference_contexts,
         )
 
         metric_results = []
@@ -178,6 +189,14 @@ class RagasEvaluator:
                 )
 
             except Exception as e:
+                error_str = str(e)
+                if "402" in error_str and "credits" in error_str.lower():
+                    logger.error(f"OpenRouter credits exhausted at metric '{metric_name}'. Aborting.")
+                    metric_results.append(MetricResult(
+                        metric_name=metric_name, score=0.0, threshold=self.threshold,
+                        passed=False, reason="Credits exhausted",
+                    ))
+                    raise _CreditExhausted(error_str)
                 logger.error(f"RAGAS metric '{metric_name}' failed for sample {sample.sample_id}: {e}")
                 metric_results.append(MetricResult(
                     metric_name=metric_name,
@@ -216,6 +235,9 @@ class RagasEvaluator:
             try:
                 result = self.evaluate_sample(sample)
                 results.append(result)
+            except _CreditExhausted:
+                logger.warning(f"Stopping RAGAS evaluation early — credits exhausted after {len(results)} samples")
+                break
             except EvaluationError as e:
                 logger.error(f"Sample {sample.sample_id} evaluation failed: {e.message}")
 
