@@ -1,5 +1,3 @@
-
-
 name: LLM Evaluation Pipeline (Scheduled)
 
 on:
@@ -24,15 +22,11 @@ on:
 
 env:
   PYTHON_VERSION: "3.11"
-  WORKING_DIRECTORY: "genai_rag_system"
 
 jobs:
   scheduled-evaluation:
     name: Scheduled LLM Evaluation
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ${{ env.WORKING_DIRECTORY }}
 
     steps:
       - name: Checkout repository
@@ -52,30 +46,26 @@ jobs:
       - name: Run evaluation pipeline
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          USE_OPENROUTER: ${{ vars.USE_OPENROUTER || 'false' }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENROUTER_MODEL: ${{ vars.OPENROUTER_MODEL || 'openai/gpt-4o-mini' }}
           EVAL_MODEL: ${{ vars.EVAL_MODEL || 'gpt-4o-mini' }}
           EVAL_THRESHOLD: ${{ github.event.inputs.threshold || '0.7' }}
+          EVAL_FRAMEWORKS: ${{ github.event.inputs.eval_framework == 'both' && 'deepeval,ragas' || github.event.inputs.eval_framework || 'deepeval,ragas' }}
+          EVAL_RUN_RAG_PIPELINE: "true"
           EVAL_RESULTS_PATH: "artifacts/evaluation"
-        run: |
-          FRAMEWORK="${{ github.event.inputs.eval_framework || 'both' }}"
-          python -m scripts.run_evaluation \
-            --framework $FRAMEWORK \
-            --dataset-path data/evaluation/eval_dataset.json \
-            --output-dir artifacts/evaluation
+        run: python -m scripts.run_evaluation
 
       - name: Check thresholds and generate report
         env:
           EVAL_THRESHOLD: ${{ github.event.inputs.threshold || '0.7' }}
-        run: |
-          python -m scripts.check_thresholds \
-            --results-dir artifacts/evaluation \
-            --threshold $EVAL_THRESHOLD
+          EVAL_RESULTS_PATH: "artifacts/evaluation"
+        run: python -m scripts.check_thresholds
 
       - name: Upload evaluation artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: scheduled-eval-${{ github.run_number }}
-          path: ${{ env.WORKING_DIRECTORY }}/artifacts/evaluation/
+          path: artifacts/evaluation/
           retention-days: 30
-
-

@@ -3,12 +3,8 @@ name: GenAI RAG System - CI/CD Pipeline
 on:
   push:
     branches: [main, develop]
-    paths:
-      - "genai_rag_system/**"
   pull_request:
     branches: [main]
-    paths:
-      - "genai_rag_system/**"
   workflow_dispatch:
     inputs:
       run_evaluation:
@@ -31,7 +27,6 @@ on:
 
 env:
   PYTHON_VERSION: "3.11"
-  WORKING_DIRECTORY: "genai_rag_system"
 
 jobs:
   # ═══════════════════════════════════════════════════════════════
@@ -40,9 +35,6 @@ jobs:
   code-quality:
     name: Code Quality Checks
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ${{ env.WORKING_DIRECTORY }}
 
     steps:
       - name: Checkout repository
@@ -77,9 +69,6 @@ jobs:
     name: Unit Tests
     runs-on: ubuntu-latest
     needs: code-quality
-    defaults:
-      run:
-        working-directory: ${{ env.WORKING_DIRECTORY }}
 
     steps:
       - name: Checkout repository
@@ -115,14 +104,14 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: test-results
-          path: ${{ env.WORKING_DIRECTORY }}/artifacts/test-results.xml
+          path: artifacts/test-results.xml
 
       - name: Upload coverage report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
-          path: ${{ env.WORKING_DIRECTORY }}/artifacts/coverage-html/
+          path: artifacts/coverage-html/
 
   # ═══════════════════════════════════════════════════════════════
   # Job 3: Integration Tests
@@ -132,9 +121,6 @@ jobs:
     runs-on: ubuntu-latest
     needs: unit-tests
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    defaults:
-      run:
-        working-directory: ${{ env.WORKING_DIRECTORY }}
 
     steps:
       - name: Checkout repository
@@ -167,7 +153,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: integration-test-results
-          path: ${{ env.WORKING_DIRECTORY }}/artifacts/integration-results.xml
+          path: artifacts/integration-results.xml
 
   # ═══════════════════════════════════════════════════════════════
   # Job 4: LLM Evaluation Pipeline
@@ -179,9 +165,6 @@ jobs:
     if: |
       (github.event_name == 'workflow_dispatch' && github.event.inputs.run_evaluation == 'true') ||
       (github.event_name == 'push' && github.ref == 'refs/heads/main')
-    defaults:
-      run:
-        working-directory: ${{ env.WORKING_DIRECTORY }}
 
     steps:
       - name: Checkout repository
@@ -201,8 +184,8 @@ jobs:
       - name: Determine evaluation framework
         id: eval-config
         run: |
-          if [ "${{ github.event.inputs.eval_framework }}" = "" ]; then
-            echo "framework=both" >> $GITHUB_OUTPUT
+          if [ "${{ github.event.inputs.eval_framework }}" = "" ] || [ "${{ github.event.inputs.eval_framework }}" = "both" ]; then
+            echo "framework=deepeval,ragas" >> $GITHUB_OUTPUT
           else
             echo "framework=${{ github.event.inputs.eval_framework }}" >> $GITHUB_OUTPUT
           fi
@@ -210,32 +193,31 @@ jobs:
       - name: Run LLM Evaluation
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          USE_OPENROUTER: ${{ vars.USE_OPENROUTER || 'false' }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENROUTER_MODEL: ${{ vars.OPENROUTER_MODEL || 'openai/gpt-4o-mini' }}
           EVAL_MODEL: ${{ vars.EVAL_MODEL || 'gpt-4o-mini' }}
           EVAL_THRESHOLD: ${{ vars.EVAL_THRESHOLD || '0.7' }}
+          EVAL_FRAMEWORKS: ${{ steps.eval-config.outputs.framework }}
+          EVAL_RUN_RAG_PIPELINE: "true"
+          EVAL_CUSTOM_METRICS_ENABLED: ${{ vars.EVAL_CUSTOM_METRICS_ENABLED || 'true' }}
+          EVAL_RESULTS_PATH: "artifacts/evaluation"
           DEEPEVAL_METRICS: ${{ vars.DEEPEVAL_METRICS || 'answer_relevancy,faithfulness,contextual_precision,contextual_recall' }}
           RAGAS_METRICS: ${{ vars.RAGAS_METRICS || 'faithfulness,answer_relevancy,context_precision,context_recall' }}
-          FAIL_ON_THRESHOLD_BREACH: "true"
-          EVAL_RESULTS_PATH: "artifacts/evaluation"
-        run: |
-          python -m scripts.run_evaluation \
-            --framework ${{ steps.eval-config.outputs.framework }} \
-            --dataset-path data/evaluation/eval_dataset.json \
-            --output-dir artifacts/evaluation
+        run: python -m scripts.run_evaluation
 
       - name: Check evaluation thresholds
         env:
           EVAL_THRESHOLD: ${{ vars.EVAL_THRESHOLD || '0.7' }}
-        run: |
-          python -m scripts.check_thresholds \
-            --results-dir artifacts/evaluation \
-            --threshold $EVAL_THRESHOLD
+          EVAL_RESULTS_PATH: "artifacts/evaluation"
+        run: python -m scripts.check_thresholds
 
       - name: Upload evaluation reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: evaluation-reports
-          path: ${{ env.WORKING_DIRECTORY }}/artifacts/evaluation/
+          path: artifacts/evaluation/
 
       - name: Comment evaluation results on PR
         if: github.event_name == 'pull_request'
@@ -243,7 +225,7 @@ jobs:
         with:
           script: |
             const fs = require('fs');
-            const path = '${{ env.WORKING_DIRECTORY }}/artifacts/evaluation/summary.json';
+            const path = 'artifacts/evaluation/summary.json';
             
             if (fs.existsSync(path)) {
               const summary = JSON.parse(fs.readFileSync(path, 'utf8'));
@@ -270,9 +252,6 @@ jobs:
     runs-on: ubuntu-latest
     needs: [unit-tests]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    defaults:
-      run:
-        working-directory: ${{ env.WORKING_DIRECTORY }}
 
     steps:
       - name: Checkout repository
@@ -293,4 +272,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: dist-package
-          path: ${{ env.WORKING_DIRECTORY }}/dist/
+          path: dist/
