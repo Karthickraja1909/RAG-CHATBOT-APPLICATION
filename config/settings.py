@@ -7,7 +7,7 @@ No hardcoded values - everything is configurable.
 import os
 from functools import lru_cache
 from pathlib import Path
-from typing import Optional
+from typing import ClassVar, Optional
 
 from pydantic import Field
 from pydantic_settings import BaseSettings
@@ -16,7 +16,13 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "case_sensitive": False, "extra": "ignore"}
+    env_path: ClassVar[Path] = Path(__file__).parent.parent / ".env"
+    model_config = {
+        "env_file": str(env_path),
+        "env_file_encoding": "utf-8",
+        "case_sensitive": False,
+        "extra": "ignore",
+    }
 
     # ─── Application ───────────────────────────────────────────────
     app_name: str = Field(default="GenAI RAG System", description="Application name")
