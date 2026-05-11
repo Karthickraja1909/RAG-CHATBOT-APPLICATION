@@ -34,17 +34,19 @@ class Settings(BaseSettings):
     # ─── LLM Configuration ────────────────────────────────────────
     openai_api_key: str = Field(default="", description="OpenAI API key")
     openai_model: str = Field(default="gpt-4o-mini", description="OpenAI model for generation")
-    openai_embedding_model: str = Field(default="text-embedding-3-small", description="Embedding model")
+    openai_embedding_model: str = Field(default="openai/text-embedding-3-small", description="Embedding model")
     openai_temperature: float = Field(default=0.0, description="LLM temperature")
     openai_max_tokens: int = Field(default=256, description="Max tokens for LLM response")
     openai_api_base: Optional[str] = Field(default=None, description="Custom OpenAI API base URL")
     openai_api_version: Optional[str] = Field(default=None, description="OpenAI API version (Azure)")
+    openai_timeout: float = Field(default=30.0, description="OpenAI / OpenRouter request timeout in seconds")
+    openai_max_retries: int = Field(default=2, description="Number of retries for OpenAI requests")
 
     # ─── OpenRouter (optional - alternative LLM provider) ─────────
     openrouter_api_key: Optional[str] = Field(default=None, description="OpenRouter API key")
     openrouter_base_url: str = Field(default="https://openrouter.ai/api/v1", description="OpenRouter API base URL")
-    openrouter_model: str = Field(default="openai/gpt-4o-mini", description="OpenRouter model identifier")
-    openrouter_embedding_model: str = Field(default="text-embedding-3-small", description="OpenRouter embedding model")
+    openrouter_model: str = Field(default="openai/gpt-oss-120b:free", description="OpenRouter model identifier")
+    openrouter_embedding_model: str = Field(default="openai/text-embedding-3-small", description="OpenRouter embedding model")
     use_openrouter: bool = Field(default=False, description="Use OpenRouter instead of direct OpenAI")
 
     # ─── Azure OpenAI (optional) ──────────────────────────────────
@@ -57,12 +59,12 @@ class Settings(BaseSettings):
     vector_store_type: str = Field(default="faiss", description="Vector store backend")
     faiss_index_path: str = Field(default="data/vector_store/faiss_index", description="FAISS index path")
     embedding_dimension: int = Field(default=1536, description="Embedding vector dimension")
-    similarity_top_k: int = Field(default=5, description="Number of similar documents to retrieve")
-    similarity_threshold: float = Field(default=0.3, description="Minimum similarity score")
+    similarity_top_k: int = Field(default=8, description="Number of similar documents to retrieve")
+    similarity_threshold: float = Field(default=0.25, description="Minimum similarity score")
 
     # ─── Document Ingestion ───────────────────────────────────────
-    chunk_size: int = Field(default=1000, description="Document chunk size in characters")
-    chunk_overlap: int = Field(default=200, description="Overlap between chunks")
+    chunk_size: int = Field(default=500, description="Document chunk size in characters")
+    chunk_overlap: int = Field(default=100, description="Overlap between chunks")
     supported_file_types: str = Field(
         default=".pdf,.txt,.md,.docx,.csv",
         description="Comma-separated supported file extensions",

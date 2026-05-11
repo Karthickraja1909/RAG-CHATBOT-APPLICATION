@@ -1,5 +1,3 @@
-
-
 """
 Document loader module for GenAI RAG System.
 Handles loading documents from various formats (PDF, TXT, MD, DOCX, CSV).
@@ -78,7 +76,7 @@ class DocumentLoader:
                 details={"error": str(e), "file_path": str(path)},
             )
 
-    def load_directory(self, directory: Union[str, Path] = None) -> list[Document]:
+    def load_directory(self, directory: Union[str, Path, None] = None) -> list[Document]:
         """
         Load all supported documents from a directory.
 
@@ -125,7 +123,7 @@ class DocumentLoader:
         return "\n".join(content_parts)
 
     def _load_pdf(self, path: Path) -> str:
-        """Load PDF file content."""
+        """Load PDF file content with structure preservation."""
         try:
             import PyPDF2
 
@@ -134,8 +132,28 @@ class DocumentLoader:
                 reader = PyPDF2.PdfReader(f)
                 for page_num, page in enumerate(reader.pages, 1):
                     text = page.extract_text()
-                    if text.strip():
-                        content_parts.append(f"[Page {page_num}]\n{text}")
+                    if not text or not text.strip():
+                        continue
+                    # Clean up common PDF extraction artifacts
+                    lines = text.split("\n")
+                    cleaned_lines = []
+                    for line in lines:
+                        stripped = line.strip()
+                        if not stripped:
+                            cleaned_lines.append("")
+                            continue
+                        # Detect likely headings: short lines in ALL CAPS or Title Case
+                        # that don't end with punctuation
+                        if (
+                            len(stripped) < 100
+                            and not stripped.endswith((".", ",", ";", ":"))
+                            and (stripped.isupper() or stripped.istitle())
+                        ):
+                            cleaned_lines.append(f"\n## {stripped}")
+                        else:
+                            cleaned_lines.append(stripped)
+                    page_text = "\n".join(cleaned_lines)
+                    content_parts.append(f"[Page {page_num}]\n{page_text}")
 
             return "\n\n".join(content_parts)
 
@@ -146,19 +164,75 @@ class DocumentLoader:
             )
 
     def _load_docx(self, path: Path) -> str:
-        """Load DOCX file content."""
+        """Load DOCX file content with headings, tables, and structure preserved."""
         try:
             import docx
+            from docx.table import Table as DocxTable
+            from docx.text.paragraph import Paragraph
 
             doc = docx.Document(str(path))
-            paragraphs = [para.text for para in doc.paragraphs if para.text.strip()]
-            return "\n\n".join(paragraphs)
+            content_parts = []
+
+            for element in doc.element.body:
+                tag = element.tag.split("}")[-1] if "}" in element.tag else element.tag
+
+                if tag == "p":
+                    para = Paragraph(element, doc)
+                    text = para.text.strip()
+                    if not text:
+                        continue
+                    style_name = ""
+                    if para.style is not None and para.style.name is not None:
+                        style_name = para.style.name.lower()
+                    # Convert headings to markdown-style headers
+                    if "heading 1" in style_name or "title" in style_name:
+                        content_parts.append(f"\n# {text}\n")
+                    elif "heading 2" in style_name:
+                        content_parts.append(f"\n## {text}\n")
+                    elif "heading 3" in style_name:
+                        content_parts.append(f"\n### {text}\n")
+                    elif "heading" in style_name:
+                        content_parts.append(f"\n#### {text}\n")
+                    elif "toc" in style_name:
+                        continue  # Skip table of contents entries
+                    else:
+                        content_parts.append(text)
+
+                elif tag == "tbl":
+                    table = DocxTable(element, doc)
+                    table_text = self._extract_table(table)
+                    if table_text:
+                        content_parts.append(table_text)
+
+            return "\n\n".join(content_parts)
 
         except ImportError:
             raise DocumentIngestionError(
                 "python-docx is required for DOCX loading. Install with: pip install python-docx",
                 details={"file_path": str(path)},
             )
+
+    def _extract_table(self, table) -> str:
+        """Extract table content as readable markdown-style text."""
+        rows = []
+        for row in table.rows:
+            cells = [cell.text.strip() for cell in row.cells]
+            if any(cells):
+                rows.append(cells)
+
+        if not rows:
+            return ""
+
+        # First row as header
+        header = rows[0]
+        lines = [" | ".join(header)]
+        lines.append(" | ".join("---" for _ in header))
+        for row in rows[1:]:
+            # Pad row to header length
+            padded = row + [""] * (len(header) - len(row))
+            lines.append(" | ".join(padded[:len(header)]))
+
+        return "\n".join(lines)
 
     def _validate_file(self, path: Path) -> None:
         """Validate file exists, is within size limits, and is supported."""

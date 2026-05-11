@@ -206,6 +206,12 @@ jobs:
           EVAL_RESULTS_PATH: "artifacts/evaluation"
           DEEPEVAL_METRICS: ${{ vars.DEEPEVAL_METRICS || 'answer_relevancy,faithfulness,contextual_precision,contextual_recall' }}
           RAGAS_METRICS: ${{ vars.RAGAS_METRICS || 'faithfulness,answer_relevancy,context_precision,context_recall' }}
+          EMAIL_ENABLED: ${{ vars.EMAIL_ENABLED || 'true' }}
+          EMAIL_SENDER: ${{ secrets.EMAIL_SENDER }}
+          EMAIL_SENDER_PASSWORD: ${{ secrets.EMAIL_SENDER_PASSWORD }}
+          EMAIL_RECIPIENTS: ${{ secrets.EMAIL_RECIPIENTS }}
+          EMAIL_SMTP_HOST: ${{ vars.EMAIL_SMTP_HOST || 'smtp.gmail.com' }}
+          EMAIL_SMTP_PORT: ${{ vars.EMAIL_SMTP_PORT || '587' }}
         run: python -m scripts.run_evaluation
 
       - name: Check evaluation thresholds

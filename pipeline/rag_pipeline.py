@@ -126,13 +126,13 @@ class RAGPipeline:
         )
 
     def _build_context(self, results: list[RetrievalResult]) -> str:
-        """Build combined context string from retrieval results."""
+        """Build combined context string from retrieval results. Clean format, no score noise."""
         if not results:
             return ""
 
         context_parts = []
         for i, result in enumerate(results, 1):
-            context_parts.append(f"[Source {i}] (score: {result.score:.3f})\n{result.content}")
+            context_parts.append(f"[{i}] {result.content}")
 
         return "\n\n---\n\n".join(context_parts)
 

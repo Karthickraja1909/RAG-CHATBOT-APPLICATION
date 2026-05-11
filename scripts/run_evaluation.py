@@ -35,18 +35,18 @@ def main():
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     logger.info("=" * 70)
-    logger.info("  GenAI RAG System — Automated LLM Evaluation Pipeline")
+    logger.info("  GenAI RAG System — Automated LLM Evaluation Pipeline")
     logger.info("=" * 70)
-    logger.info(f"  Timestamp       : {timestamp}")
-    logger.info(f"  Frameworks      : {settings.eval_frameworks_list}")
-    logger.info(f"  Threshold       : {settings.eval_threshold}")
-    logger.info(f"  Dataset         : {settings.eval_dataset_path}")
-    logger.info(f"  Eval Model      : {settings.eval_model}")
-    logger.info(f"  Run RAG Pipeline: {settings.eval_run_rag_pipeline}")
-    logger.info(f"  Custom Metrics  : {settings.eval_custom_metrics_enabled}")
-    logger.info(f"  Email Enabled   : {settings.email_enabled}")
+    logger.info(f"  Timestamp       : {timestamp}")
+    logger.info(f"  Frameworks      : {settings.eval_frameworks_list}")
+    logger.info(f"  Threshold       : {settings.eval_threshold}")
+    logger.info(f"  Dataset         : {settings.eval_dataset_path}")
+    logger.info(f"  Eval Model      : {settings.eval_model}")
+    logger.info(f"  Run RAG Pipeline: {settings.eval_run_rag_pipeline}")
+    logger.info(f"  Custom Metrics  : {settings.eval_custom_metrics_enabled}")
+    logger.info(f"  Email Enabled   : {settings.email_enabled}")
     if settings.email_enabled and settings.email_recipients_list:
-        logger.info(f"  Recipients      : {settings.email_recipients_list}")
+        logger.info(f"  Recipients      : {settings.email_recipients_list}")
     logger.info("=" * 70)
 
     # ─── Step 1: Initialize RAG Pipeline ──────────────────────────────
@@ -114,18 +114,26 @@ def main():
     if settings.email_enabled and settings.email_recipients_list:
         try:
             from utils.email_sender import send_evaluation_report
-            send_evaluation_report(combined_report, report_path)
-            logger.info("✓ Evaluation report sent via email")
+            email_sent = send_evaluation_report(combined_report, report_path)
+            if email_sent:
+                logger.info("✓ Evaluation report sent via email")
+            else:
+                logger.warning("✗ Email report was NOT sent — check email configuration and logs above")
         except Exception as e:
-            logger.error(f"Email sending failed: {e}")
+            logger.error(f"Email sending failed with exception: {type(e).__name__}: {e}")
+    else:
+        if not settings.email_enabled:
+            logger.info("Email notifications disabled (EMAIL_ENABLED=false)")
+        elif not settings.email_recipients_list:
+            logger.warning("No email recipients configured (EMAIL_RECIPIENTS is empty)")
 
     # ─── Step 8: Exit with appropriate code ───────────────────────────
     total_duration = time.time() - start_time
     logger.info(f"\nTotal pipeline duration: {total_duration:.1f}s")
 
-    # if not threshold_passed and settings.fail_on_threshold_breach:
-    #     logger.error("Pipeline FAILED — metrics below threshold")
-    #     sys.exit(0)
+    if not threshold_passed and settings.fail_on_threshold_breach:
+        logger.error("Pipeline FAILED — metrics below threshold")
+        sys.exit(1)
 
     logger.info("Pipeline PASSED — all metrics within threshold")
     sys.exit(0)
@@ -234,14 +242,14 @@ def _print_summary(report: dict, threshold_passed: bool):
     summary = report["summary"]
 
     logger.info("\n" + "═" * 70)
-    logger.info("  EVALUATION RESULTS SUMMARY")
+    logger.info("  EVALUATION RESULTS SUMMARY")
     logger.info("═" * 70)
-    logger.info(f"  Overall Pass Rate  : {summary['overall_pass_rate']:.1%}")
-    logger.info(f"  Total Samples      : {summary['total_samples']}")
-    logger.info(f"  Passed             : {summary['total_passed']}")
-    logger.info(f"  Failed             : {summary['total_failed']}")
-    logger.info(f"  Duration           : {summary['duration_seconds']:.1f}s")
-    logger.info(f"  Threshold Met      : {'YES' if threshold_passed else 'NO'}")
+    logger.info(f"  Overall Pass Rate  : {summary['overall_pass_rate']:.1%}")
+    logger.info(f"  Total Samples      : {summary['total_samples']}")
+    logger.info(f"  Passed             : {summary['total_passed']}")
+    logger.info(f"  Failed             : {summary['total_failed']}")
+    logger.info(f"  Duration           : {summary['duration_seconds']:.1f}s")
+    logger.info(f"  Threshold Met      : {'YES' if threshold_passed else 'NO'}")
     logger.info("═" * 70)
 
 

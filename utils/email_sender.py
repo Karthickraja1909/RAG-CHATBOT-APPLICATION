@@ -1,4 +1,3 @@
-
 """
 Email notification module for evaluation reports.
 Sends evaluation results to configured recipients via SMTP.
@@ -45,9 +44,19 @@ def send_evaluation_report(report: dict, report_path: Optional[Path] = None) -> 
         logger.warning("Email sender credentials not configured")
         return False
 
+    logger.info(
+        f"Preparing email: from={settings.email_sender}, "
+        f"to={settings.email_recipients_list}, "
+        f"smtp={settings.email_smtp_host}:{settings.email_smtp_port}"
+    )
+
     # Build email content
-    subject = _build_subject(report, settings)
-    html_body = _build_html_report(report)
+    try:
+        subject = _build_subject(report, settings)
+        html_body = _build_html_report(report)
+    except Exception as e:
+        logger.error(f"Failed to build email content: {type(e).__name__}: {e}")
+        return False
 
     # Send to each recipient
     try:
@@ -106,10 +115,15 @@ def _build_html_report(report: dict) -> str:
     config = report.get("configuration", {})
     results = report.get("results", {})
 
-    pass_rate = summary.get("overall_pass_rate", 0.0)
-    threshold = config.get("threshold", 0.7)
+    pass_rate = summary.get("overall_pass_rate", 0.0) or 0.0
+    threshold = config.get("threshold", 0.7) or 0.7
     status_color = "#28a745" if pass_rate >= threshold else "#dc3545"
     status_text = "PASSED" if pass_rate >= threshold else "FAILED"
+
+    total_samples = summary.get("total_samples", 0) or 0
+    total_passed = summary.get("total_passed", 0) or 0
+    total_failed = summary.get("total_failed", 0) or 0
+    duration = summary.get("duration_seconds", 0) or 0
 
     html = f"""
     <html>
@@ -142,10 +156,10 @@ def _build_html_report(report: dict) -> str:
             <table class="config-table">
                 <tr><td>Overall Pass Rate</td><td>{pass_rate:.1%}</td></tr>
                 <tr><td>Threshold</td><td>{threshold:.1%}</td></tr>
-                <tr><td>Total Samples</td><td>{summary.get('total_samples', 0)}</td></tr>
-                <tr><td>Passed</td><td>{summary.get('total_passed', 0)}</td></tr>
-                <tr><td>Failed</td><td>{summary.get('total_failed', 0)}</td></tr>
-                <tr><td>Duration</td><td>{summary.get('duration_seconds', 0):.1f}s</td></tr>
+                <tr><td>Total Samples</td><td>{total_samples}</td></tr>
+                <tr><td>Passed</td><td>{total_passed}</td></tr>
+                <tr><td>Failed</td><td>{total_failed}</td></tr>
+                <tr><td>Duration</td><td>{duration:.1f}s</td></tr>
             </table>
 
             <h2>Configuration</h2>
@@ -159,7 +173,7 @@ def _build_html_report(report: dict) -> str:
 
     # Per-framework results
     for framework, data in results.items():
-        fw_pass_rate = data.get("pass_rate", 0.0)
+        fw_pass_rate = data.get("pass_rate", 0.0) or 0.0
         fw_status = "pass" if fw_pass_rate >= threshold else "fail"
 
         html += f"""
@@ -171,12 +185,14 @@ def _build_html_report(report: dict) -> str:
                 <tbody>
         """
 
-        metrics_summary = data.get("metrics_summary", {})
+        metrics_summary = data.get("metrics_summary", {}) or {}
         for metric_name, metric_data in metrics_summary.items():
-            avg = metric_data.get("average_score", 0.0)
-            min_s = metric_data.get("min_score", 0.0)
-            max_s = metric_data.get("max_score", 0.0)
-            m_pass_rate = metric_data.get("pass_rate", 0.0)
+            if not isinstance(metric_data, dict):
+                continue
+            avg = metric_data.get("average_score", 0.0) or 0.0
+            min_s = metric_data.get("min_score", 0.0) or 0.0
+            max_s = metric_data.get("max_score", 0.0) or 0.0
+            m_pass_rate = metric_data.get("pass_rate", 0.0) or 0.0
             m_status_class = "pass" if avg >= threshold else "fail"
             m_status_text = "PASS" if avg >= threshold else "FAIL"
 
@@ -196,9 +212,9 @@ def _build_html_report(report: dict) -> str:
             </table>
         """
 
-    # Per-sample details (collapsed)
+    # Per-sample details
     for framework, data in results.items():
-        per_sample = data.get("per_sample_results", [])
+        per_sample = data.get("per_sample_results", []) or []
         if per_sample:
             html += f"""
             <h2>{framework.upper()} — Per-Sample Details</h2>
@@ -209,12 +225,14 @@ def _build_html_report(report: dict) -> str:
                 <tbody>
             """
             for sample in per_sample:
-                s_class = "pass" if sample["overall_passed"] else "fail"
-                s_text = "PASS" if sample["overall_passed"] else "FAIL"
+                s_passed = sample.get("overall_passed", False)
+                s_class = "pass" if s_passed else "fail"
+                s_text = "PASS" if s_passed else "FAIL"
+                s_score = sample.get("average_score", 0.0) or 0.0
                 html += f"""
                     <tr>
-                        <td>{sample['sample_id']}</td>
-                        <td>{sample['average_score']:.3f}</td>
+                        <td>{sample.get('sample_id', 'N/A')}</td>
+                        <td>{s_score:.3f}</td>
                         <td class="{s_class}">{s_text}</td>
                     </tr>
                 """

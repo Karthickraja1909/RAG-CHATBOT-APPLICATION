@@ -30,6 +30,8 @@ class EmbeddingService:
             self.client = openai.OpenAI(
                 api_key=self.settings.openrouter_api_key,
                 base_url=self.settings.openrouter_base_url,
+                timeout=self.settings.openai_timeout,
+                max_retries=self.settings.openai_max_retries,
             )
             # Use OpenRouter-specific embedding model if no explicit model passed
             if not model:
@@ -40,12 +42,16 @@ class EmbeddingService:
                 api_key=self.settings.azure_openai_api_key,
                 api_version=self.settings.azure_openai_api_version,
                 azure_endpoint=self.settings.azure_openai_endpoint,
+                timeout=self.settings.openai_timeout,
+                max_retries=self.settings.openai_max_retries,
             )
             logger.info(f"Embedding Service using Azure OpenAI: {self.model}")
         else:
             self.client = openai.OpenAI(
                 api_key=self.settings.openai_api_key,
                 base_url=self.settings.openai_api_base,
+                timeout=self.settings.openai_timeout,
+                max_retries=self.settings.openai_max_retries,
             )
             logger.info(f"Embedding Service using OpenAI: {self.model}")
 
@@ -62,16 +68,29 @@ class EmbeddingService:
         if not text.strip():
             raise LLMError("Cannot embed empty text")
 
+        logger.debug(
+            f"Embedding single text length={len(text)} model={self.model}"
+        )
+
         try:
             response = self.client.embeddings.create(
                 input=[text],
                 model=self.model,
             )
-            return response.data[0].embedding
+            embedding = response.data[0].embedding
+            logger.debug(
+                f"Received single embedding length={len(embedding)}"
+            )
+            return embedding
 
         except openai.APIError as e:
             raise LLMError(
                 f"OpenAI API error during embedding: {e}",
+                details={"model": self.model, "text_length": len(text)},
+            )
+        except Exception as e:
+            raise LLMError(
+                f"Unexpected error during embedding: {type(e).__name__}: {e}",
                 details={"model": self.model, "text_length": len(text)},
             )
 
@@ -100,6 +119,9 @@ class EmbeddingService:
             try:
                 # Filter out empty texts
                 valid_texts = [t if t.strip() else " " for t in batch]
+                logger.debug(
+                    f"Embedding batch {batch_num}/{total_batches} size={len(valid_texts)} model={self.model}"
+                )
 
                 response = self.client.embeddings.create(
                     input=valid_texts,
@@ -109,11 +131,18 @@ class EmbeddingService:
                 batch_embeddings = [item.embedding for item in response.data]
                 all_embeddings.extend(batch_embeddings)
 
-                logger.debug(f"Embedded batch {batch_num}/{total_batches} ({len(batch)} texts)")
+                logger.debug(
+                    f"Embedded batch {batch_num}/{total_batches} received {len(batch_embeddings)} embeddings"
+                )
 
             except openai.APIError as e:
                 raise LLMError(
                     f"OpenAI API error in batch {batch_num}: {e}",
+                    details={"batch_num": batch_num, "batch_size": len(batch)},
+                )
+            except Exception as e:
+                raise LLMError(
+                    f"Unexpected error in batch {batch_num}: {type(e).__name__}: {e}",
                     details={"batch_num": batch_num, "batch_size": len(batch)},
                 )
 

@@ -1,5 +1,3 @@
-
-
 """
 LLM service module for GenAI RAG System.
 Handles all interactions with the language model (OpenAI/Azure OpenAI).
@@ -81,7 +79,7 @@ class LLMService:
                 max_tokens=self.max_tokens,
             )
 
-            answer = response.choices[0].message.content
+            answer = response.choices[0].message.content or ""
             logger.debug(
                 f"LLM response generated (model={self.model}, "
                 f"tokens={response.usage.total_tokens if response.usage else 'N/A'})"
@@ -102,14 +100,8 @@ class LLMService:
     ) -> str:
         """
         Generate a response using a context-aware prompt template.
-
-        Args:
-            query: User's question.
-            context: Retrieved context documents.
-            system_prompt_template: Template with {context} and {question} placeholders.
-
-        Returns:
-            Generated response.
+        Uses the system prompt as a proper system message and the query as user message.
         """
-        prompt = system_prompt_template.format(context=context, question=query)
-        return self.generate(prompt)
+        system_message = system_prompt_template.replace("{question}", "").replace("{context}", context).strip()
+        user_message = query
+        return self.generate(user_message, system_message=system_message)

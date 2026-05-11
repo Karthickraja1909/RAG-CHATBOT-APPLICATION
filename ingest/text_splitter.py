@@ -1,9 +1,10 @@
 """
 Text splitter module for GenAI RAG System.
-Handles splitting documents into chunks with configurable size and overlap.
+Structure-aware splitting that preserves heading context in every chunk.
 """
 
 import hashlib
+import re
 from typing import Optional
 
 from config.settings import get_settings
@@ -12,9 +13,12 @@ from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+# Regex to detect markdown-style headings
+_HEADING_RE = re.compile(r"^(#{1,4})\s+(.+)$", re.MULTILINE)
+
 
 class TextSplitter:
-    """Splits documents into smaller chunks for vector storage."""
+    """Structure-aware text splitter that keeps heading context in every chunk."""
 
     def __init__(
         self,
@@ -87,58 +91,116 @@ class TextSplitter:
 
     def _split_text(self, text: str) -> list[str]:
         """
-        Split text into chunks using recursive character splitting.
-        Tries to split on paragraph boundaries first, then sentences, then characters.
+        Split text into chunks with section heading context.
+        Each chunk is prefixed with its parent heading so vector search
+        can match on section topic even for body-text chunks.
         """
-        separators = ["\n\n", "\n", ". ", " ", ""]
-        return self._recursive_split(text, separators)
-
-    def _recursive_split(self, text: str, separators: list[str]) -> list[str]:
-        """Recursively split text using a hierarchy of separators."""
-        if len(text) <= self.chunk_size:
-            return [text.strip()] if text.strip() else []
-
-        separator = separators[0]
-        remaining_separators = separators[1:] if len(separators) > 1 else [""]
-
-        if separator == "":
-            # Last resort: split by character count
-            return self._split_by_characters(text)
-
-        splits = text.split(separator)
+        sections = self._split_into_sections(text)
         chunks = []
-        current_chunk = ""
 
-        for split in splits:
-            candidate = f"{current_chunk}{separator}{split}" if current_chunk else split
+        for heading, body in sections:
+            heading_prefix = f"{heading}\n" if heading else ""
+            prefix_len = len(heading_prefix)
+            effective_size = self.chunk_size - prefix_len
 
-            if len(candidate) <= self.chunk_size:
-                current_chunk = candidate
-            else:
-                if current_chunk:
-                    chunks.append(current_chunk.strip())
+            if effective_size < 50:
+                effective_size = self.chunk_size
 
-                if len(split) > self.chunk_size:
-                    # Recursively split oversized pieces
-                    sub_chunks = self._recursive_split(split, remaining_separators)
-                    chunks.extend(sub_chunks)
-                    current_chunk = ""
-                else:
-                    current_chunk = split
+            sub_chunks = self._sentence_split(body, effective_size)
 
-        if current_chunk.strip():
-            chunks.append(current_chunk.strip())
+            for sc in sub_chunks:
+                chunk_text = f"{heading_prefix}{sc}".strip()
+                if chunk_text:
+                    chunks.append(chunk_text)
 
-        # Apply overlap
+        # Apply overlap between adjacent chunks
         return self._apply_overlap(chunks)
 
-    def _split_by_characters(self, text: str) -> list[str]:
+    def _split_into_sections(self, text: str) -> list[tuple[str, str]]:
+        """
+        Split text by markdown headings into (heading, body) pairs.
+        If no headings found, returns one section with empty heading.
+        """
+        heading_positions = [(m.start(), m.group(0)) for m in _HEADING_RE.finditer(text)]
+
+        if not heading_positions:
+            return [("", text)]
+
+        sections = []
+        # Content before first heading
+        if heading_positions[0][0] > 0:
+            pre_text = text[: heading_positions[0][0]].strip()
+            if pre_text:
+                sections.append(("", pre_text))
+
+        for i, (pos, heading) in enumerate(heading_positions):
+            end_pos = heading_positions[i + 1][0] if i + 1 < len(heading_positions) else len(text)
+            body = text[pos + len(heading) : end_pos].strip()
+            if body:
+                sections.append((heading.strip(), body))
+
+        return sections if sections else [("", text)]
+
+    def _sentence_split(self, text: str, max_size: int) -> list[str]:
+        """
+        Split text respecting sentence boundaries.
+        Tries paragraph → sentence → word → character boundaries in order.
+        """
+        if len(text) <= max_size:
+            return [text.strip()] if text.strip() else []
+
+        # Try splitting by paragraphs first
+        paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
+        if len(paragraphs) > 1:
+            return self._merge_splits(paragraphs, max_size)
+
+        # Try splitting by sentences
+        sentences = re.split(r"(?<=[.!?])\s+", text)
+        if len(sentences) > 1:
+            return self._merge_splits(sentences, max_size)
+
+        # Fall back to word boundaries
+        words = text.split()
+        if len(words) > 1:
+            return self._merge_splits(words, max_size, separator=" ")
+
+        # Last resort: character split
+        return self._split_by_characters(text, max_size)
+
+    def _merge_splits(
+        self, parts: list[str], max_size: int, separator: str = "\n\n"
+    ) -> list[str]:
+        """Merge small parts into chunks up to max_size."""
+        chunks = []
+        current = ""
+
+        for part in parts:
+            candidate = f"{current}{separator}{part}" if current else part
+            if len(candidate) <= max_size:
+                current = candidate
+            else:
+                if current:
+                    chunks.append(current.strip())
+                if len(part) > max_size:
+                    # Recursively split oversized part
+                    chunks.extend(self._sentence_split(part, max_size))
+                    current = ""
+                else:
+                    current = part
+
+        if current.strip():
+            chunks.append(current.strip())
+
+        return chunks
+
+    def _split_by_characters(self, text: str, max_size: Optional[int] = None) -> list[str]:
         """Split text by character count with overlap."""
+        max_size = max_size or self.chunk_size
         chunks = []
         start = 0
 
         while start < len(text):
-            end = start + self.chunk_size
+            end = start + max_size
             chunk = text[start:end].strip()
             if chunk:
                 chunks.append(chunk)
