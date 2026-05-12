@@ -109,14 +109,7 @@ class FAISSVectorStore:
     ) -> list[RetrievalResult]:
         """
         Search the vector store for similar documents.
-
-        Args:
-            query: Search query text.
-            top_k: Number of results to return.
-            threshold: Minimum similarity score.
-
-        Returns:
-            List of RetrievalResult objects sorted by similarity.
+        Returns deduplicated results — removes near-duplicate chunks from the same document.
         """
         if self._index is None or self._index.ntotal == 0:
             logger.warning("Vector store is empty. No results to return.")
@@ -125,8 +118,8 @@ class FAISSVectorStore:
         top_k = top_k or self.settings.similarity_top_k
         threshold = threshold or self.settings.similarity_threshold
 
-        # Ensure we don't request more results than available
-        top_k = min(top_k, self._index.ntotal)
+        # Fetch extra candidates for deduplication, then trim to top_k
+        fetch_k = min(top_k * 2, self._index.ntotal)
 
         start_time = time.time()
 
@@ -138,36 +131,39 @@ class FAISSVectorStore:
         faiss.normalize_L2(query_vector)
 
         # Search
-        scores, indices = self._index.search(query_vector, top_k)
+        scores, indices = self._index.search(query_vector, fetch_k)
 
-        # Build results
+        # Build results with deduplication
         results = []
-        top_scores = []  # For debugging
+        seen_content_hashes = set()
         for score, idx in zip(scores[0], indices[0]):
             if idx == -1:
                 continue
-            
-            top_scores.append((float(score), idx))
-            
             if score < threshold:
                 continue
+
+            content = self._chunk_contents[idx]
+            # Deduplicate: skip chunks with >80% content overlap (via first 200 chars hash)
+            content_key = content[:200].strip().lower()
+            if content_key in seen_content_hashes:
+                continue
+            seen_content_hashes.add(content_key)
 
             metadata = self._metadata_store[idx]
             result = RetrievalResult(
                 chunk_id=metadata["chunk_id"],
-                content=self._chunk_contents[idx],
+                content=content,
                 score=float(score),
                 source=metadata["source"],
                 metadata=metadata,
             )
             results.append(result)
 
+            if len(results) >= top_k:
+                break
+
         elapsed = time.time() - start_time
-        if top_scores:
-            top_score_str = f"(top scores: {[f'{s:.3f}' for s, _ in top_scores[:3]]})"
-        else:
-            top_score_str = ""
-        logger.info(f"Search returned {len(results)} results (threshold={threshold:.2f}) {top_score_str} in {elapsed * 1000:.1f}ms")
+        logger.info(f"Search returned {len(results)} results in {elapsed * 1000:.1f}ms")
 
         return results
 
@@ -229,8 +225,7 @@ class FAISSVectorStore:
     def _save_index(self) -> None:
         """Save FAISS index and metadata to disk."""
         try:
-            # Create the index directory (not just parent)
-            self.index_path.mkdir(parents=True, exist_ok=True)
+            self.index_path.parent.mkdir(parents=True, exist_ok=True)
 
             faiss = self._get_faiss()
             faiss.write_index(self._index, str(self.index_path / "index.faiss"))

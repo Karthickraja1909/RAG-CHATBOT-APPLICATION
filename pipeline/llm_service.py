@@ -33,6 +33,7 @@ class LLMService:
             self.client = openai.OpenAI(
                 api_key=self.settings.openrouter_api_key,
                 base_url=self.settings.openrouter_base_url,
+                timeout=60.0,
             )
             self.model = self.settings.openrouter_model
             logger.info(f"LLM Service using OpenRouter: {self.model}")
@@ -41,6 +42,7 @@ class LLMService:
                 api_key=self.settings.azure_openai_api_key,
                 api_version=self.settings.azure_openai_api_version,
                 azure_endpoint=self.settings.azure_openai_endpoint,
+                timeout=60.0,
             )
             self.model = self.settings.azure_openai_deployment or self.model
             logger.info(f"LLM Service using Azure OpenAI: {self.model}")
@@ -48,6 +50,7 @@ class LLMService:
             self.client = openai.OpenAI(
                 api_key=self.settings.openai_api_key,
                 base_url=self.settings.openai_api_base,
+                timeout=60.0,
             )
             logger.info(f"LLM Service using OpenAI: {self.model}")
 
@@ -79,7 +82,7 @@ class LLMService:
                 max_tokens=self.max_tokens,
             )
 
-            answer = response.choices[0].message.content or ""
+            answer = response.choices[0].message.content
             logger.debug(
                 f"LLM response generated (model={self.model}, "
                 f"tokens={response.usage.total_tokens if response.usage else 'N/A'})"
@@ -99,9 +102,15 @@ class LLMService:
         system_prompt_template: str,
     ) -> str:
         """
-        Generate a response using a context-aware prompt template.
-        Uses the system prompt as a proper system message and the query as user message.
+        Generate a response using retrieved context.
+        Sends context as system message and query as user message
+        for better LLM instruction following.
         """
-        system_message = system_prompt_template.replace("{question}", "").replace("{context}", context).strip()
-        user_message = query
-        return self.generate(user_message, system_message=system_message)
+        # Build system message: inject context into template, remove the question placeholder
+        system_message = system_prompt_template.format(context=context, question="").strip()
+        # Remove trailing "User Question:" or "Answer:" if left empty
+        for trailing in ["User Question:", "User Question: ", "Answer:", "Answer: "]:
+            if system_message.endswith(trailing):
+                system_message = system_message[: -len(trailing)].strip()
+
+        return self.generate(query, system_message=system_message)
