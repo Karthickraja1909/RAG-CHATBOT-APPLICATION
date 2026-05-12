@@ -9,6 +9,7 @@ from typing import Optional, Union
 
 from config.settings import get_settings
 from ingest.document_loader import DocumentLoader
+from ingest.metadata_enricher import MetadataEnricher
 from ingest.text_splitter import TextSplitter
 from schemas.documents import Document, DocumentChunk
 from utils.exceptions import DocumentIngestionError
@@ -18,18 +19,20 @@ logger = get_logger(__name__)
 
 
 class IngestionPipeline:
-    """Orchestrates document ingestion: load → split → embed → store."""
+    """Orchestrates document ingestion: load → enrich → split → embed → store."""
 
     def __init__(
         self,
         document_loader: Optional[DocumentLoader] = None,
         text_splitter: Optional[TextSplitter] = None,
         vector_store=None,
+        metadata_enricher: Optional[MetadataEnricher] = None,
     ):
         self.settings = get_settings()
         self.document_loader = document_loader or DocumentLoader()
         self.text_splitter = text_splitter or TextSplitter()
         self.vector_store = vector_store
+        self.metadata_enricher = metadata_enricher or MetadataEnricher()
 
     def ingest_file(self, file_path: Union[str, Path]) -> list[DocumentChunk]:
         """
@@ -45,6 +48,7 @@ class IngestionPipeline:
         logger.info(f"Ingesting file: {file_path}")
 
         document = self.document_loader.load_document(file_path)
+        document = self.metadata_enricher.enrich(document)
         chunks = self.text_splitter.split_document(document)
 
         if self.vector_store and chunks:
@@ -74,6 +78,9 @@ class IngestionPipeline:
         if not documents:
             logger.warning(f"No documents found in: {dir_path}")
             return []
+
+        # Metadata enrichment
+        documents = self.metadata_enricher.enrich_batch(documents)
 
         all_chunks = self.text_splitter.split_documents(documents)
 

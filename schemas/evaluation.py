@@ -18,6 +18,13 @@ class EvaluationSample(BaseModel):
     context: Optional[list[str]] = Field(default=None, description="Ground truth context")
     retrieval_context: Optional[list[str]] = Field(default=None, description="Retrieved context from RAG")
 
+    # ─── Enterprise Metadata Fields ───────────────────────────────
+    difficulty: Optional[str] = Field(default=None, description="Question difficulty: easy, medium, hard")
+    question_type: Optional[str] = Field(default=None, description="Question type: simple, reasoning, multi_context")
+    source_strategy: Optional[str] = Field(default=None, description="Generation strategy: manual, document_grounded, ragas_synthetic, production")
+    auto_generated: bool = Field(default=False, description="Whether this sample was auto-generated")
+    human_reviewed: bool = Field(default=False, description="Whether this sample has been human-reviewed")
+
 
 class EvaluationDataset(BaseModel):
     """Collection of evaluation samples."""

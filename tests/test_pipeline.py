@@ -42,6 +42,14 @@ class TestRAGPipeline:
             "RAG is a technique that retrieves relevant documents and uses them "
             "as context for generating accurate responses."
         )
+        mock.generate.return_value = "Follow-up question 1\nFollow-up question 2\nFollow-up question 3"
+        mock.model = "gpt-4o-mini"
+        mock.token_usage.summary = {
+            "prompt_tokens": 60,
+            "completion_tokens": 40,
+            "total_tokens": 100,
+            "request_count": 1,
+        }
         return mock
 
     def test_query_returns_response(self, mock_vector_store, mock_llm_service):

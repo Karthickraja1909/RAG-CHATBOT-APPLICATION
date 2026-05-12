@@ -3,6 +3,7 @@ Evaluation pipeline module for GenAI RAG System.
 Orchestrates the full evaluation workflow: load data → run RAG → evaluate → report.
 """
 
+import asyncio
 import json
 import time
 import uuid
@@ -118,6 +119,103 @@ class EvaluationPipeline:
     ) -> EvaluationReport:
         """Run evaluation using only RAGAS framework."""
         reports = self.run_full_evaluation(
+            dataset_path=dataset_path,
+            frameworks=["ragas"],
+            run_rag=run_rag,
+        )
+        return reports.get("ragas")
+
+    async def arun_full_evaluation(
+        self,
+        dataset_path: Optional[str] = None,
+        frameworks: Optional[list[str]] = None,
+        run_rag: bool = True,
+    ) -> dict[str, EvaluationReport]:
+        """
+        Run the complete evaluation pipeline asynchronously.
+        Uses aevaluate_dataset() on each framework for concurrent sample evaluation.
+
+        Args:
+            dataset_path: Path to evaluation dataset JSON.
+            frameworks: List of frameworks to use ("deepeval", "ragas", or both).
+            run_rag: Whether to run RAG pipeline to generate actual_outputs.
+
+        Returns:
+            Dictionary mapping framework name to EvaluationReport.
+        """
+        frameworks = frameworks or ["deepeval", "ragas"]
+        start_time = time.time()
+
+        logger.info(f"Starting async evaluation pipeline with frameworks: {frameworks}")
+
+        # Step 1: Load dataset
+        dataset = self.dataset_manager.load_dataset(dataset_path)
+        logger.info(f"Loaded dataset: {dataset.name} ({dataset.size} samples)")
+
+        # Step 2: Run RAG pipeline (sync — needs sequential API calls)
+        if run_rag and self.rag_pipeline:
+            dataset = self._run_rag_on_dataset(dataset)
+
+        # Step 3: Run evaluation frameworks concurrently
+        reports: dict[str, EvaluationReport] = {}
+
+        async def _run_deepeval():
+            try:
+                evaluator = self.deepeval_evaluator or DeepEvalEvaluator()
+                return await evaluator.aevaluate_dataset(dataset)
+            except EvaluationError as e:
+                logger.error(f"DeepEval async evaluation failed: {e.message}")
+                return None
+
+        async def _run_ragas():
+            try:
+                evaluator = self.ragas_evaluator or RagasEvaluator()
+                return await evaluator.aevaluate_dataset(dataset)
+            except EvaluationError as e:
+                logger.error(f"RAGAS async evaluation failed: {e.message}")
+                return None
+
+        tasks = {}
+        if "deepeval" in frameworks:
+            tasks["deepeval"] = _run_deepeval()
+        if "ragas" in frameworks:
+            tasks["ragas"] = _run_ragas()
+
+        if tasks:
+            results = await asyncio.gather(*tasks.values())
+            for name, result in zip(tasks.keys(), results):
+                if result is not None:
+                    reports[name] = result
+
+        # Step 4: Save reports
+        for framework, report in reports.items():
+            self._save_report(report, framework)
+
+        total_time = time.time() - start_time
+        logger.info(f"Async evaluation pipeline completed in {total_time:.1f}s")
+
+        return reports
+
+    async def arun_deepeval_evaluation(
+        self,
+        dataset_path: Optional[str] = None,
+        run_rag: bool = True,
+    ) -> EvaluationReport:
+        """Run evaluation using only DeepEval framework asynchronously."""
+        reports = await self.arun_full_evaluation(
+            dataset_path=dataset_path,
+            frameworks=["deepeval"],
+            run_rag=run_rag,
+        )
+        return reports.get("deepeval")
+
+    async def arun_ragas_evaluation(
+        self,
+        dataset_path: Optional[str] = None,
+        run_rag: bool = True,
+    ) -> EvaluationReport:
+        """Run evaluation using only RAGAS framework asynchronously."""
+        reports = await self.arun_full_evaluation(
             dataset_path=dataset_path,
             frameworks=["ragas"],
             run_rag=run_rag,
