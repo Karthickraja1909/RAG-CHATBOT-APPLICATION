@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     app_version: str = Field(default="1.0.0", description="Application version")
     environment: str = Field(default="development", description="Runtime environment")
     log_level: str = Field(default="INFO", description="Logging level")
+    log_file: Optional[str] = Field(default=None, description="Log file path for JSON structured logs (e.g. logs/app.log)")
     debug: bool = Field(default=False, description="Debug mode flag")
 
     # ─── LLM Configuration ────────────────────────────────────────
@@ -66,7 +67,10 @@ class Settings(BaseSettings):
 
     # ─── RAG Pipeline ─────────────────────────────────────────────
     retrieval_strategy: str = Field(default="similarity", description="Retrieval strategy")
-    reranking_enabled: bool = Field(default=False, description="Enable reranking")
+    reranking_enabled: bool = Field(default=False, description="Enable LLM-based reranking to reduce retrieval noise")
+    reranker_model: str = Field(default="gpt-4o-mini", description="Model used for reranking retrieved chunks")
+    reranker_top_n: int = Field(default=4, description="Number of chunks to keep after reranking (must be <= similarity_top_k)")
+    reranker_relevance_threshold: float = Field(default=0.5, description="Minimum reranker relevance score (0.0-1.0). Chunks below this are dropped.")
     context_window_size: int = Field(default=4096, description="Context window for LLM")
     system_prompt_path: str = Field(default="config/prompts/system_prompt.txt", description="System prompt file")
 
@@ -114,6 +118,41 @@ class Settings(BaseSettings):
     eval_run_rag_pipeline: bool = Field(default=True, description="Run RAG pipeline to generate outputs before evaluation")
     eval_custom_metrics_enabled: bool = Field(default=False, description="Enable custom production metrics (adds bias, toxicity, coherence, completeness, conciseness — increases API cost)")
     eval_auto_generate_dataset: bool = Field(default=False, description="Auto-generate eval dataset from ingested documents before evaluation")
+
+    # ─── Testset Generation ───────────────────────────────────────
+    testset_strategy: str = Field(
+        default="ragas",
+        description="Testset generation strategy: 'ragas' (RAGAS TestsetGenerator), 'document' (chunk-based LLM), 'hybrid' (both merged)",
+    )
+    testset_size: int = Field(default=20, description="Number of test cases to generate")
+
+    # ─── Hybrid Search (BM25 + Dense) ─────────────────────────────
+    hybrid_search_enabled: bool = Field(default=False, description="Enable BM25 + dense vector hybrid search")
+    hybrid_search_alpha: float = Field(default=0.5, description="Weight for dense vs BM25 (1.0=pure dense, 0.0=pure BM25)")
+
+    # ─── Response Cache ───────────────────────────────────────────
+    response_cache_enabled: bool = Field(default=False, description="Enable in-memory response caching")
+    response_cache_max_size: int = Field(default=256, description="Maximum number of cached responses")
+    response_cache_ttl_seconds: int = Field(default=3600, description="Cache entry TTL in seconds")
+
+    # ─── Embedding Cache ──────────────────────────────────────────
+    embedding_cache_enabled: bool = Field(default=True, description="Cache embeddings to avoid re-embedding identical text")
+    embedding_cache_max_size: int = Field(default=2048, description="Maximum number of cached embeddings")
+
+    # ─── Follow-up Questions ──────────────────────────────────────
+    followup_enabled: bool = Field(default=True, description="Generate suggested follow-up questions after each answer")
+    followup_count: int = Field(default=3, description="Number of follow-up questions to generate")
+
+    # ─── Metadata Enrichment ──────────────────────────────────────
+    metadata_enrichment_enabled: bool = Field(default=False, description="Auto-tag documents with metadata (department, topic) using LLM during ingestion")
+
+    # ─── FastAPI Server ───────────────────────────────────────────
+    api_host: str = Field(default="0.0.0.0", description="FastAPI server host")
+    api_port: int = Field(default=8000, description="FastAPI server port")
+
+    # ─── Connection Pooling ───────────────────────────────────────
+    llm_connection_pool_size: int = Field(default=10, description="Max HTTP connections for LLM client pool")
+    llm_request_timeout: int = Field(default=60, description="LLM request timeout in seconds")
 
     @property
     def supported_extensions(self) -> list[str]:

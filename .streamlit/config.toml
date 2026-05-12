@@ -7,8 +7,8 @@ port = 8501
 enableCORS = false
 
 [theme]
-primaryColor = "#667eea"
+primaryColor = "#6366f1"
 backgroundColor = "#ffffff"
-secondaryBackgroundColor = "#f8f9fa"
-textColor = "#1a1a2e"
+secondaryBackgroundColor = "#f8fafc"
+textColor = "#0f172a"
 font = "sans serif"

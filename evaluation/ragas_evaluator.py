@@ -4,6 +4,7 @@ Production-level LLM evaluation using RAGAS framework.
 Supports: Faithfulness, AnswerRelevancy, ContextPrecision, ContextRecall, and more.
 """
 
+import asyncio
 import time
 import uuid
 from typing import Optional
@@ -217,6 +218,66 @@ class RagasEvaluator:
             overall_passed=overall_passed,
         )
 
+    async def aevaluate_sample(self, sample: EvaluationSample) -> EvaluationResult:
+        """
+        Evaluate a single sample asynchronously — runs all metrics concurrently.
+        """
+        from ragas import SingleTurnSample
+
+        if not sample.actual_output:
+            raise EvaluationError(
+                f"Sample {sample.sample_id} has no actual_output for evaluation"
+            )
+
+        max_chars = 1500
+        retrieved_contexts = [c[:max_chars] for c in (sample.retrieval_context or [])][:3]
+        reference_contexts = [c[:max_chars] for c in (sample.context or [])][:3] if sample.context else []
+
+        ragas_sample = SingleTurnSample(
+            user_input=sample.user_input,
+            response=sample.actual_output[:2000],
+            reference=sample.expected_output[:2000] if sample.expected_output else "",
+            retrieved_contexts=retrieved_contexts,
+            reference_contexts=reference_contexts,
+        )
+
+        async def _score_one(metric_name: str, metric):
+            try:
+                score = await metric.single_turn_ascore(ragas_sample)
+                result = MetricResult(
+                    metric_name=metric_name,
+                    score=float(score),
+                    threshold=self.threshold,
+                    passed=float(score) >= self.threshold,
+                    reason=None,
+                )
+                logger.debug(
+                    f"  {metric_name}: {score:.3f} ({'PASS' if result.passed else 'FAIL'})"
+                )
+                return result
+            except Exception as e:
+                error_str = str(e)
+                if "402" in error_str and "credits" in error_str.lower():
+                    logger.error(f"OpenRouter credits exhausted at metric '{metric_name}'.")
+                    raise _CreditExhausted(error_str)
+                logger.error(f"RAGAS metric '{metric_name}' failed for sample {sample.sample_id}: {e}")
+                return MetricResult(
+                    metric_name=metric_name,
+                    score=0.0,
+                    threshold=self.threshold,
+                    passed=False,
+                    reason=f"Evaluation error: {str(e)}",
+                )
+
+        tasks = [_score_one(name, metric) for name, metric in self._metrics.items()]
+        metric_results = await asyncio.gather(*tasks)
+
+        return EvaluationResult(
+            sample_id=sample.sample_id,
+            metrics=list(metric_results),
+            overall_passed=all(m.passed for m in metric_results),
+        )
+
     def evaluate_dataset(self, dataset: EvaluationDataset) -> EvaluationReport:
         """
         Evaluate an entire dataset using RAGAS batch evaluation.
@@ -264,6 +325,71 @@ class RagasEvaluator:
 
         logger.info(
             f"RAGAS evaluation complete: {report.passed_samples}/{report.total_samples} passed "
+            f"({report.pass_rate:.1%}) in {duration:.1f}s"
+        )
+
+        return report
+
+    async def aevaluate_dataset(self, dataset: EvaluationDataset) -> EvaluationReport:
+        """
+        Evaluate an entire dataset asynchronously with batched concurrency.
+        Uses eval_batch_size to control how many samples run in parallel.
+        """
+        start_time = time.time()
+        batch_size = self.settings.eval_batch_size
+        logger.info(
+            f"Starting async RAGAS evaluation: {dataset.size} samples × "
+            f"{len(self._metrics)} metrics (batch_size={batch_size})"
+        )
+
+        results: list[EvaluationResult] = []
+        semaphore = asyncio.Semaphore(batch_size)
+        credit_exhausted = False
+
+        async def _eval_with_semaphore(idx: int, sample: EvaluationSample):
+            nonlocal credit_exhausted
+            if credit_exhausted:
+                return None
+            async with semaphore:
+                logger.info(f"Evaluating sample {idx}/{dataset.size}: {sample.sample_id}")
+                try:
+                    return await self.aevaluate_sample(sample)
+                except _CreditExhausted:
+                    credit_exhausted = True
+                    logger.warning("Credits exhausted — cancelling remaining samples")
+                    return None
+                except EvaluationError as e:
+                    logger.error(f"Sample {sample.sample_id} evaluation failed: {e.message}")
+                    return None
+
+        tasks = [
+            _eval_with_semaphore(i, sample)
+            for i, sample in enumerate(dataset.samples, 1)
+        ]
+        raw_results = await asyncio.gather(*tasks)
+        results = [r for r in raw_results if r is not None]
+
+        duration = time.time() - start_time
+        summary = self._generate_summary(results)
+
+        report = EvaluationReport(
+            report_id=f"ragas_{uuid.uuid4().hex[:8]}",
+            framework="ragas",
+            dataset_id=dataset.dataset_id,
+            results=results,
+            summary=summary,
+            duration_seconds=duration,
+            config={
+                "metrics": self.metrics_config,
+                "threshold": self.threshold,
+                "model": self.model,
+                "batch_size": batch_size,
+                "async": True,
+            },
+        )
+
+        logger.info(
+            f"Async RAGAS evaluation complete: {report.passed_samples}/{report.total_samples} passed "
             f"({report.pass_rate:.1%}) in {duration:.1f}s"
         )
 
