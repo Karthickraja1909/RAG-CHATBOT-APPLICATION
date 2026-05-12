@@ -70,11 +70,13 @@ class RagasEvaluator:
                     base_url=self.settings.openrouter_base_url,
                     temperature=0.0,
                     max_tokens=100,
+                    request_timeout=60.0,
                 )
                 embeddings = OpenAIEmbeddings(
                     model=self.settings.eval_embedding_model,
                     api_key=self.settings.openrouter_api_key,
                     base_url=self.settings.openrouter_base_url,
+                    timeout=60.0,
                 )
                 logger.info(f"RAGAS using OpenRouter: {self.settings.openrouter_model}")
             elif self.settings.azure_openai_endpoint:
@@ -98,7 +100,8 @@ class RagasEvaluator:
                     model=self.model,
                     api_key=self.settings.openai_api_key,
                     temperature=0.0,
-                    max_tokens=150,
+                    max_tokens=100,
+                    request_timeout=60.0,
                 )
                 embeddings = OpenAIEmbeddings(
                     model=self.settings.eval_embedding_model,

@@ -1,6 +1,3 @@
-
-
-
 """
 Embedding service module for GenAI RAG System.
 Handles generating vector embeddings using OpenAI or Azure OpenAI.
@@ -30,28 +27,28 @@ class EmbeddingService:
             self.client = openai.OpenAI(
                 api_key=self.settings.openrouter_api_key,
                 base_url=self.settings.openrouter_base_url,
-                timeout=self.settings.openai_timeout,
-                max_retries=self.settings.openai_max_retries,
+                timeout=60.0,
             )
             # Use OpenRouter-specific embedding model if no explicit model passed
             if not model:
                 self.model = self.settings.openrouter_embedding_model
+            # Ensure model has provider prefix for OpenRouter (e.g. openai/text-embedding-3-small)
+            if "/" not in self.model:
+                self.model = f"openai/{self.model}"
             logger.info(f"Embedding Service using OpenRouter: {self.model}")
         elif self.settings.azure_openai_endpoint:
             self.client = openai.AzureOpenAI(
                 api_key=self.settings.azure_openai_api_key,
                 api_version=self.settings.azure_openai_api_version,
                 azure_endpoint=self.settings.azure_openai_endpoint,
-                timeout=self.settings.openai_timeout,
-                max_retries=self.settings.openai_max_retries,
+                timeout=60.0,
             )
             logger.info(f"Embedding Service using Azure OpenAI: {self.model}")
         else:
             self.client = openai.OpenAI(
                 api_key=self.settings.openai_api_key,
                 base_url=self.settings.openai_api_base,
-                timeout=self.settings.openai_timeout,
-                max_retries=self.settings.openai_max_retries,
+                timeout=60.0,
             )
             logger.info(f"Embedding Service using OpenAI: {self.model}")
 
@@ -68,29 +65,16 @@ class EmbeddingService:
         if not text.strip():
             raise LLMError("Cannot embed empty text")
 
-        logger.debug(
-            f"Embedding single text length={len(text)} model={self.model}"
-        )
-
         try:
             response = self.client.embeddings.create(
                 input=[text],
                 model=self.model,
             )
-            embedding = response.data[0].embedding
-            logger.debug(
-                f"Received single embedding length={len(embedding)}"
-            )
-            return embedding
+            return response.data[0].embedding
 
         except openai.APIError as e:
             raise LLMError(
                 f"OpenAI API error during embedding: {e}",
-                details={"model": self.model, "text_length": len(text)},
-            )
-        except Exception as e:
-            raise LLMError(
-                f"Unexpected error during embedding: {type(e).__name__}: {e}",
                 details={"model": self.model, "text_length": len(text)},
             )
 
@@ -119,9 +103,6 @@ class EmbeddingService:
             try:
                 # Filter out empty texts
                 valid_texts = [t if t.strip() else " " for t in batch]
-                logger.debug(
-                    f"Embedding batch {batch_num}/{total_batches} size={len(valid_texts)} model={self.model}"
-                )
 
                 response = self.client.embeddings.create(
                     input=valid_texts,
@@ -131,18 +112,11 @@ class EmbeddingService:
                 batch_embeddings = [item.embedding for item in response.data]
                 all_embeddings.extend(batch_embeddings)
 
-                logger.debug(
-                    f"Embedded batch {batch_num}/{total_batches} received {len(batch_embeddings)} embeddings"
-                )
+                logger.debug(f"Embedded batch {batch_num}/{total_batches} ({len(batch)} texts)")
 
             except openai.APIError as e:
                 raise LLMError(
                     f"OpenAI API error in batch {batch_num}: {e}",
-                    details={"batch_num": batch_num, "batch_size": len(batch)},
-                )
-            except Exception as e:
-                raise LLMError(
-                    f"Unexpected error in batch {batch_num}: {type(e).__name__}: {e}",
                     details={"batch_num": batch_num, "batch_size": len(batch)},
                 )
 

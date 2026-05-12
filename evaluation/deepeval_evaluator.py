@@ -76,20 +76,29 @@ class DeepEvalEvaluator:
                     def __init__(self, model_name, api_key, base_url, max_tokens=256):
                         self._model_name = model_name
                         self._max_tokens = max_tokens
-                        self._client = openai.OpenAI(api_key=api_key, base_url=base_url)
+                        self._client = openai.OpenAI(
+                            api_key=api_key,
+                            base_url=base_url,
+                            timeout=60.0,
+                        )
                         super().__init__(model_name)
 
                     def load_model(self):
                         return self._model_name
 
                     def generate(self, prompt: str, schema=None) -> str:
-                        resp = self._client.chat.completions.create(
-                            model=self._model_name,
-                            messages=[{"role": "user", "content": prompt}],
-                            max_tokens=self._max_tokens,
-                            temperature=0.0,
-                        )
-                        return resp.choices[0].message.content
+                        try:
+                            resp = self._client.chat.completions.create(
+                                model=self._model_name,
+                                messages=[{"role": "user", "content": prompt}],
+                                max_tokens=self._max_tokens,
+                                temperature=0.0,
+                            )
+                            return resp.choices[0].message.content
+                        except openai.APIStatusError as e:
+                            if e.status_code == 402:
+                                raise _CreditExhausted(str(e))
+                            raise
 
                     async def a_generate(self, prompt: str, schema=None) -> str:
                         return self.generate(prompt, schema)

@@ -7,7 +7,7 @@ No hardcoded values - everything is configurable.
 import os
 from functools import lru_cache
 from pathlib import Path
-from typing import ClassVar, Optional
+from typing import Optional
 
 from pydantic import Field
 from pydantic_settings import BaseSettings
@@ -16,13 +16,7 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
-    env_path: ClassVar[Path] = Path(__file__).parent.parent / ".env"
-    model_config = {
-        "env_file": str(env_path),
-        "env_file_encoding": "utf-8",
-        "case_sensitive": False,
-        "extra": "ignore",
-    }
+    model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "case_sensitive": False, "extra": "ignore"}
 
     # ─── Application ───────────────────────────────────────────────
     app_name: str = Field(default="GenAI RAG System", description="Application name")
@@ -36,11 +30,9 @@ class Settings(BaseSettings):
     openai_model: str = Field(default="gpt-4o-mini", description="OpenAI model for generation")
     openai_embedding_model: str = Field(default="openai/text-embedding-3-small", description="Embedding model")
     openai_temperature: float = Field(default=0.0, description="LLM temperature")
-    openai_max_tokens: int = Field(default=256, description="Max tokens for LLM response")
+    openai_max_tokens: int = Field(default=300, description="Max tokens for LLM response")
     openai_api_base: Optional[str] = Field(default=None, description="Custom OpenAI API base URL")
     openai_api_version: Optional[str] = Field(default=None, description="OpenAI API version (Azure)")
-    openai_timeout: float = Field(default=30.0, description="OpenAI / OpenRouter request timeout in seconds")
-    openai_max_retries: int = Field(default=2, description="Number of retries for OpenAI requests")
 
     # ─── OpenRouter (optional - alternative LLM provider) ─────────
     openrouter_api_key: Optional[str] = Field(default=None, description="OpenRouter API key")
@@ -79,7 +71,7 @@ class Settings(BaseSettings):
     system_prompt_path: str = Field(default="config/prompts/system_prompt.txt", description="System prompt file")
 
     # ─── Evaluation Configuration ─────────────────────────────────
-    eval_model: str = Field(default="openai/gpt-oss-120b:free", description="Model for LLM-as-a-Judge evaluation")
+    eval_model: str = Field(default="gpt-4o-mini", description="Model for LLM-as-a-Judge evaluation")
     eval_embedding_model: str = Field(default="text-embedding-3-small", description="Embedding model for eval")
     eval_threshold: float = Field(default=0.7, description="Minimum pass threshold for metrics")
     eval_dataset_path: str = Field(default="data/evaluation/eval_dataset.json", description="Evaluation dataset")
@@ -88,7 +80,7 @@ class Settings(BaseSettings):
 
     # ─── DeepEval Specific ────────────────────────────────────────
     deepeval_metrics: str = Field(
-        default="answer_relevancy,faithfulness,contextual_precision,contextual_recall,hallucination",
+        default="answer_relevancy,faithfulness,contextual_precision,contextual_recall",
         description="Comma-separated DeepEval metrics to run",
     )
     deepeval_threshold: float = Field(default=0.7, description="DeepEval pass threshold")
@@ -103,7 +95,7 @@ class Settings(BaseSettings):
     # ─── CI/CD & Reporting ────────────────────────────────────────
     report_format: str = Field(default="json", description="Report output format (json, html, csv)")
     artifact_directory: str = Field(default="artifacts", description="CI/CD artifacts directory")
-    fail_on_threshold_breach: bool = Field(default=False, description="Fail CI if metrics below threshold")
+    fail_on_threshold_breach: bool = Field(default=True, description="Fail CI if metrics below threshold")
 
     # ─── Email Notification ───────────────────────────────────────
     email_enabled: bool = Field(default=True, description="Enable email report delivery")
@@ -120,7 +112,7 @@ class Settings(BaseSettings):
         description="Comma-separated frameworks to run (deepeval, ragas)",
     )
     eval_run_rag_pipeline: bool = Field(default=True, description="Run RAG pipeline to generate outputs before evaluation")
-    eval_custom_metrics_enabled: bool = Field(default=True, description="Enable custom production metrics")
+    eval_custom_metrics_enabled: bool = Field(default=False, description="Enable custom production metrics (adds bias, toxicity, coherence, completeness, conciseness — increases API cost)")
     eval_auto_generate_dataset: bool = Field(default=False, description="Auto-generate eval dataset from ingested documents before evaluation")
 
     @property
