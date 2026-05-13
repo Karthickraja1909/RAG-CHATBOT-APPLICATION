@@ -43,88 +43,6 @@ class EvaluationPipeline:
         self.ragas_evaluator = ragas_evaluator
         self.dataset_manager = dataset_manager or DatasetManager()
 
-    def run_full_evaluation(
-        self,
-        dataset_path: Optional[str] = None,
-        frameworks: Optional[list[str]] = None,
-        run_rag: bool = True,
-    ) -> dict[str, EvaluationReport]:
-        """
-        Run the complete evaluation pipeline.
-
-        Args:
-            dataset_path: Path to evaluation dataset JSON.
-            frameworks: List of frameworks to use ("deepeval", "ragas", or both).
-            run_rag: Whether to run RAG pipeline to generate actual_outputs.
-
-        Returns:
-            Dictionary mapping framework name to EvaluationReport.
-        """
-        frameworks = frameworks or ["deepeval", "ragas"]
-        start_time = time.time()
-
-        logger.info(f"Starting full evaluation pipeline with frameworks: {frameworks}")
-
-        # Step 1: Load dataset
-        dataset = self.dataset_manager.load_dataset(dataset_path)
-        logger.info(f"Loaded dataset: {dataset.name} ({dataset.size} samples)")
-
-        # Step 2: Run RAG pipeline to generate actual outputs (if needed)
-        if run_rag and self.rag_pipeline:
-            dataset = self._run_rag_on_dataset(dataset)
-
-        # Step 3: Run evaluation frameworks
-        reports: dict[str, EvaluationReport] = {}
-
-        if "deepeval" in frameworks:
-            try:
-                evaluator = self.deepeval_evaluator or DeepEvalEvaluator()
-                reports["deepeval"] = evaluator.evaluate_dataset(dataset)
-            except EvaluationError as e:
-                logger.error(f"DeepEval evaluation failed: {e.message}")
-
-        if "ragas" in frameworks:
-            try:
-                evaluator = self.ragas_evaluator or RagasEvaluator()
-                reports["ragas"] = evaluator.evaluate_dataset(dataset)
-            except EvaluationError as e:
-                logger.error(f"RAGAS evaluation failed: {e.message}")
-
-        # Step 4: Save reports
-        for framework, report in reports.items():
-            self._save_report(report, framework)
-
-        total_time = time.time() - start_time
-        logger.info(f"Full evaluation pipeline completed in {total_time:.1f}s")
-
-        return reports
-
-    def run_deepeval_evaluation(
-        self,
-        dataset_path: Optional[str] = None,
-        run_rag: bool = True,
-    ) -> EvaluationReport:
-        """Run evaluation using only DeepEval framework."""
-        reports = self.run_full_evaluation(
-            dataset_path=dataset_path,
-            frameworks=["deepeval"],
-            run_rag=run_rag,
-        )
-        return reports.get("deepeval")
-
-    def run_ragas_evaluation(
-        self,
-        dataset_path: Optional[str] = None,
-        run_rag: bool = True,
-    ) -> EvaluationReport:
-        """Run evaluation using only RAGAS framework."""
-        reports = self.run_full_evaluation(
-            dataset_path=dataset_path,
-            frameworks=["ragas"],
-            run_rag=run_rag,
-        )
-        return reports.get("ragas")
-
     async def arun_full_evaluation(
         self,
         dataset_path: Optional[str] = None,
@@ -222,7 +140,7 @@ class EvaluationPipeline:
         )
         return reports.get("ragas")
 
-    def evaluate_single_query(
+    async def aevaluate_single_query(
         self,
         user_input: str,
         expected_output: Optional[str] = None,
@@ -230,7 +148,7 @@ class EvaluationPipeline:
         frameworks: Optional[list[str]] = None,
     ) -> dict:
         """
-        Evaluate a single query end-to-end.
+        Evaluate a single query end-to-end asynchronously.
 
         Args:
             user_input: User question.
@@ -255,16 +173,20 @@ class EvaluationPipeline:
 
         results = {"query": user_input, "answer": actual_output, "evaluations": {}}
 
+        sample = EvaluationSample(
+            sample_id=f"single_{uuid.uuid4().hex[:8]}",
+            user_input=user_input,
+            actual_output=actual_output,
+            expected_output=expected_output,
+            context=context,
+            retrieval_context=retrieval_context,
+        )
+
         # DeepEval
-        if "deepeval" in frameworks and self.deepeval_evaluator:
+        if "deepeval" in frameworks:
             try:
-                result = self.deepeval_evaluator.evaluate_single(
-                    user_input=user_input,
-                    actual_output=actual_output,
-                    expected_output=expected_output,
-                    context=context,
-                    retrieval_context=retrieval_context,
-                )
+                evaluator = self.deepeval_evaluator or DeepEvalEvaluator()
+                result = await evaluator.aevaluate_sample(sample)
                 results["evaluations"]["deepeval"] = {
                     "passed": result.overall_passed,
                     "average_score": result.average_score,
@@ -274,15 +196,10 @@ class EvaluationPipeline:
                 logger.error(f"DeepEval single evaluation failed: {e}")
 
         # RAGAS
-        if "ragas" in frameworks and self.ragas_evaluator:
+        if "ragas" in frameworks:
             try:
-                result = self.ragas_evaluator.evaluate_single(
-                    user_input=user_input,
-                    actual_output=actual_output,
-                    expected_output=expected_output,
-                    context=context,
-                    retrieval_context=retrieval_context,
-                )
+                evaluator = self.ragas_evaluator or RagasEvaluator()
+                result = await evaluator.aevaluate_sample(sample)
                 results["evaluations"]["ragas"] = {
                     "passed": result.overall_passed,
                     "average_score": result.average_score,
