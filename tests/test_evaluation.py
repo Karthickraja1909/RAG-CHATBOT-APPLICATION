@@ -4,7 +4,7 @@ Tests evaluation logic without making real API calls.
 """
 
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from schemas.evaluation import (
     EvaluationDataset,
@@ -110,18 +110,21 @@ class TestDeepEvalEvaluator:
             evaluator.settings.deepeval_metrics_list = ["answer_relevancy", "faithfulness"]
             evaluator.settings.deepeval_threshold = 0.7
             evaluator.settings.eval_model = "gpt-4o-mini"
+            evaluator.settings.eval_batch_size = 5
             evaluator.metrics_config = ["answer_relevancy", "faithfulness"]
             evaluator.threshold = 0.7
             evaluator.model = "gpt-4o-mini"
 
-            # Create mock metrics
+            # Create mock metrics with async a_measure
             mock_metric_1 = MagicMock()
             mock_metric_1.score = 0.85
             mock_metric_1.reason = "Good relevancy"
+            mock_metric_1.a_measure = AsyncMock()
 
             mock_metric_2 = MagicMock()
             mock_metric_2.score = 0.90
             mock_metric_2.reason = "Faithful to context"
+            mock_metric_2.a_measure = AsyncMock()
 
             evaluator._metrics = {
                 "answer_relevancy": mock_metric_1,
@@ -130,31 +133,34 @@ class TestDeepEvalEvaluator:
 
             return evaluator
 
-    def test_evaluate_sample(self, mock_deepeval_metrics, sample_eval_dataset):
+    @pytest.mark.asyncio
+    async def test_evaluate_sample(self, mock_deepeval_metrics, sample_eval_dataset):
         """Test evaluating a single sample."""
         with patch("evaluation.deepeval_evaluator.LLMTestCase") as MockTestCase:
             MockTestCase.return_value = MagicMock()
 
-            result = mock_deepeval_metrics.evaluate_sample(sample_eval_dataset.samples[0])
+            result = await mock_deepeval_metrics.aevaluate_sample(sample_eval_dataset.samples[0])
 
             assert isinstance(result, EvaluationResult)
             assert len(result.metrics) == 2
             assert result.overall_passed is True
             assert result.average_score > 0.7
 
-    def test_evaluate_dataset(self, mock_deepeval_metrics, sample_eval_dataset):
+    @pytest.mark.asyncio
+    async def test_evaluate_dataset(self, mock_deepeval_metrics, sample_eval_dataset):
         """Test evaluating a full dataset."""
         with patch("evaluation.deepeval_evaluator.LLMTestCase") as MockTestCase:
             MockTestCase.return_value = MagicMock()
 
-            report = mock_deepeval_metrics.evaluate_dataset(sample_eval_dataset)
+            report = await mock_deepeval_metrics.aevaluate_dataset(sample_eval_dataset)
 
             assert isinstance(report, EvaluationReport)
             assert report.framework == "deepeval"
             assert report.total_samples == 2
             assert report.duration_seconds > 0
 
-    def test_evaluate_sample_without_output_raises_error(self, mock_deepeval_metrics):
+    @pytest.mark.asyncio
+    async def test_evaluate_sample_without_output_raises_error(self, mock_deepeval_metrics):
         """Test that sample without actual_output raises error."""
         sample = EvaluationSample(
             sample_id="no_output",
@@ -163,7 +169,7 @@ class TestDeepEvalEvaluator:
         )
 
         with pytest.raises(EvaluationError):
-            mock_deepeval_metrics.evaluate_sample(sample)
+            await mock_deepeval_metrics.aevaluate_sample(sample)
 
 
 class TestRagasEvaluator:
@@ -180,16 +186,17 @@ class TestRagasEvaluator:
             evaluator.settings.ragas_metrics_list = ["faithfulness", "answer_relevancy"]
             evaluator.settings.ragas_threshold = 0.7
             evaluator.settings.eval_model = "gpt-4o-mini"
+            evaluator.settings.eval_batch_size = 5
             evaluator.metrics_config = ["faithfulness", "answer_relevancy"]
             evaluator.threshold = 0.7
             evaluator.model = "gpt-4o-mini"
 
-            # Mock metrics that return scores
+            # Mock metrics with async single_turn_ascore
             mock_metric_1 = MagicMock()
-            mock_metric_1.single_turn_score.return_value = 0.88
+            mock_metric_1.single_turn_ascore = AsyncMock(return_value=0.88)
 
             mock_metric_2 = MagicMock()
-            mock_metric_2.single_turn_score.return_value = 0.92
+            mock_metric_2.single_turn_ascore = AsyncMock(return_value=0.92)
 
             evaluator._metrics = {
                 "faithfulness": mock_metric_1,
@@ -198,23 +205,25 @@ class TestRagasEvaluator:
 
             return evaluator
 
-    def test_evaluate_sample(self, mock_ragas_evaluator, sample_eval_dataset):
+    @pytest.mark.asyncio
+    async def test_evaluate_sample(self, mock_ragas_evaluator, sample_eval_dataset):
         """Test evaluating a single sample with RAGAS."""
         with patch("evaluation.ragas_evaluator.SingleTurnSample") as MockSample:
             MockSample.return_value = MagicMock()
 
-            result = mock_ragas_evaluator.evaluate_sample(sample_eval_dataset.samples[0])
+            result = await mock_ragas_evaluator.aevaluate_sample(sample_eval_dataset.samples[0])
 
             assert isinstance(result, EvaluationResult)
             assert len(result.metrics) == 2
             assert result.overall_passed is True
 
-    def test_evaluate_dataset(self, mock_ragas_evaluator, sample_eval_dataset):
+    @pytest.mark.asyncio
+    async def test_evaluate_dataset(self, mock_ragas_evaluator, sample_eval_dataset):
         """Test evaluating a full dataset with RAGAS."""
         with patch("evaluation.ragas_evaluator.SingleTurnSample") as MockSample:
             MockSample.return_value = MagicMock()
 
-            report = mock_ragas_evaluator.evaluate_dataset(sample_eval_dataset)
+            report = await mock_ragas_evaluator.aevaluate_dataset(sample_eval_dataset)
 
             assert isinstance(report, EvaluationReport)
             assert report.framework == "ragas"

@@ -106,6 +106,8 @@ def mock_openai_client():
     mock_choice.message.content = "This is a test response from the LLM."
     mock_usage = MagicMock()
     mock_usage.total_tokens = 100
+    mock_usage.prompt_tokens = 60
+    mock_usage.completion_tokens = 40
     mock_completion = MagicMock()
     mock_completion.choices = [mock_choice]
     mock_completion.usage = mock_usage

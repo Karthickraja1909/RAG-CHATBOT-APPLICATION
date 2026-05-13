@@ -4,6 +4,7 @@ Production-level LLM evaluation using DeepEval framework.
 Supports: AnswerRelevancy, Faithfulness, ContextualPrecision, ContextualRecall, Hallucination, GEval.
 """
 
+import asyncio
 import time
 import uuid
 from typing import Optional
@@ -76,23 +77,48 @@ class DeepEvalEvaluator:
                     def __init__(self, model_name, api_key, base_url, max_tokens=256):
                         self._model_name = model_name
                         self._max_tokens = max_tokens
-                        self._client = openai.OpenAI(api_key=api_key, base_url=base_url)
+                        self._client = openai.OpenAI(
+                            api_key=api_key,
+                            base_url=base_url,
+                            timeout=60.0,
+                        )
                         super().__init__(model_name)
 
                     def load_model(self):
                         return self._model_name
 
                     def generate(self, prompt: str, schema=None) -> str:
-                        resp = self._client.chat.completions.create(
-                            model=self._model_name,
-                            messages=[{"role": "user", "content": prompt}],
-                            max_tokens=self._max_tokens,
-                            temperature=0.0,
-                        )
-                        return resp.choices[0].message.content
+                        try:
+                            resp = self._client.chat.completions.create(
+                                model=self._model_name,
+                                messages=[{"role": "user", "content": prompt}],
+                                max_tokens=self._max_tokens,
+                                temperature=0.0,
+                            )
+                            return resp.choices[0].message.content
+                        except openai.APIStatusError as e:
+                            if e.status_code == 402:
+                                raise _CreditExhausted(str(e))
+                            raise
 
                     async def a_generate(self, prompt: str, schema=None) -> str:
-                        return self.generate(prompt, schema)
+                        try:
+                            client = openai.AsyncOpenAI(
+                                api_key=self._client.api_key,
+                                base_url=str(self._client.base_url),
+                                timeout=60.0,
+                            )
+                            resp = await client.chat.completions.create(
+                                model=self._model_name,
+                                messages=[{"role": "user", "content": prompt}],
+                                max_tokens=self._max_tokens,
+                                temperature=0.0,
+                            )
+                            return resp.choices[0].message.content
+                        except openai.APIStatusError as e:
+                            if e.status_code == 402:
+                                raise _CreditExhausted(str(e))
+                            raise
 
                     def get_model_name(self) -> str:
                         return self._model_name
@@ -194,15 +220,9 @@ class DeepEvalEvaluator:
                 details={"error": str(e)},
             )
 
-    def evaluate_sample(self, sample: EvaluationSample) -> EvaluationResult:
+    async def aevaluate_sample(self, sample: EvaluationSample) -> EvaluationResult:
         """
-        Evaluate a single sample against all configured metrics.
-
-        Args:
-            sample: EvaluationSample with user_input, actual_output, etc.
-
-        Returns:
-            EvaluationResult with metric scores.
+        Evaluate a single sample asynchronously — runs all metrics concurrently.
         """
         from deepeval.test_case import LLMTestCase
 
@@ -211,7 +231,6 @@ class DeepEvalEvaluator:
                 f"Sample {sample.sample_id} has no actual_output for evaluation"
             )
 
-        # Truncate contexts to reduce token usage (avoids 402 credit errors on OpenRouter)
         max_chars = getattr(self, "_max_context_chars", 1500)
         retrieval_context = [c[:max_chars] for c in (sample.retrieval_context or [])][:3]
         context = [c[:max_chars] for c in (sample.context or [])][:3] if sample.context else None
@@ -224,10 +243,9 @@ class DeepEvalEvaluator:
             retrieval_context=retrieval_context,
         )
 
-        metric_results = []
-        for metric_name, metric in self._metrics.items():
+        async def _measure_one(metric_name: str, metric):
             try:
-                metric.measure(test_case)
+                await metric.a_measure(test_case)
                 result = MetricResult(
                     metric_name=metric_name,
                     score=metric.score,
@@ -235,70 +253,74 @@ class DeepEvalEvaluator:
                     passed=metric.score >= self.threshold,
                     reason=metric.reason if hasattr(metric, "reason") else None,
                 )
-                metric_results.append(result)
                 logger.debug(
                     f"  {metric_name}: {metric.score:.3f} "
                     f"({'PASS' if result.passed else 'FAIL'})"
                 )
-
+                return result
             except Exception as e:
                 error_str = str(e)
-                # Detect credit exhaustion (402) and abort immediately
                 if "402" in error_str and "credits" in error_str.lower():
-                    logger.error(f"OpenRouter credits exhausted at metric '{metric_name}'. Aborting evaluation.")
-                    metric_results.append(MetricResult(
-                        metric_name=metric_name, score=0.0, threshold=self.threshold,
-                        passed=False, reason="Credits exhausted",
-                    ))
+                    logger.error(f"OpenRouter credits exhausted at metric '{metric_name}'.")
                     raise _CreditExhausted(error_str)
-
                 logger.error(f"Metric '{metric_name}' failed for sample {sample.sample_id}: {e}")
-                metric_results.append(MetricResult(
+                return MetricResult(
                     metric_name=metric_name,
                     score=0.0,
                     threshold=self.threshold,
                     passed=False,
                     reason=f"Evaluation error: {str(e)}",
-                ))
+                )
 
-        overall_passed = all(m.passed for m in metric_results)
+        tasks = [_measure_one(name, metric) for name, metric in self._metrics.items()]
+        metric_results = await asyncio.gather(*tasks)
 
         return EvaluationResult(
             sample_id=sample.sample_id,
-            metrics=metric_results,
-            overall_passed=overall_passed,
+            metrics=list(metric_results),
+            overall_passed=all(m.passed for m in metric_results),
         )
 
-    def evaluate_dataset(self, dataset: EvaluationDataset) -> EvaluationReport:
+    async def aevaluate_dataset(self, dataset: EvaluationDataset) -> EvaluationReport:
         """
-        Evaluate an entire dataset against all metrics.
-
-        Args:
-            dataset: EvaluationDataset with samples.
-
-        Returns:
-            EvaluationReport with all results and summary.
+        Evaluate an entire dataset asynchronously with batched concurrency.
+        Uses eval_batch_size to control how many samples run in parallel.
         """
         start_time = time.time()
+        batch_size = self.settings.eval_batch_size
         logger.info(
-            f"Starting DeepEval evaluation: {dataset.size} samples × {len(self._metrics)} metrics"
+            f"Starting async DeepEval evaluation: {dataset.size} samples × "
+            f"{len(self._metrics)} metrics (batch_size={batch_size})"
         )
 
-        results = []
-        for i, sample in enumerate(dataset.samples, 1):
-            logger.info(f"Evaluating sample {i}/{dataset.size}: {sample.sample_id}")
-            try:
-                result = self.evaluate_sample(sample)
-                results.append(result)
-            except _CreditExhausted:
-                logger.warning(f"Stopping DeepEval evaluation early — credits exhausted after {len(results)} samples")
-                break
-            except EvaluationError as e:
-                logger.error(f"Sample {sample.sample_id} evaluation failed: {e.message}")
+        results: list[EvaluationResult] = []
+        semaphore = asyncio.Semaphore(batch_size)
+        credit_exhausted = False
+
+        async def _eval_with_semaphore(idx: int, sample: EvaluationSample):
+            nonlocal credit_exhausted
+            if credit_exhausted:
+                return None
+            async with semaphore:
+                logger.info(f"Evaluating sample {idx}/{dataset.size}: {sample.sample_id}")
+                try:
+                    return await self.aevaluate_sample(sample)
+                except _CreditExhausted:
+                    credit_exhausted = True
+                    logger.warning("Credits exhausted — cancelling remaining samples")
+                    return None
+                except EvaluationError as e:
+                    logger.error(f"Sample {sample.sample_id} evaluation failed: {e.message}")
+                    return None
+
+        tasks = [
+            _eval_with_semaphore(i, sample)
+            for i, sample in enumerate(dataset.samples, 1)
+        ]
+        raw_results = await asyncio.gather(*tasks)
+        results = [r for r in raw_results if r is not None]
 
         duration = time.time() - start_time
-
-        # Generate summary
         summary = self._generate_summary(results)
 
         report = EvaluationReport(
@@ -312,46 +334,17 @@ class DeepEvalEvaluator:
                 "metrics": self.metrics_config,
                 "threshold": self.threshold,
                 "model": self.model,
+                "batch_size": batch_size,
+                "async": True,
             },
         )
 
         logger.info(
-            f"DeepEval evaluation complete: {report.passed_samples}/{report.total_samples} passed "
+            f"Async DeepEval evaluation complete: {report.passed_samples}/{report.total_samples} passed "
             f"({report.pass_rate:.1%}) in {duration:.1f}s"
         )
 
         return report
-
-    def evaluate_single(
-        self,
-        user_input: str,
-        actual_output: str,
-        expected_output: Optional[str] = None,
-        context: Optional[list[str]] = None,
-        retrieval_context: Optional[list[str]] = None,
-    ) -> EvaluationResult:
-        """
-        Convenience method to evaluate a single query-response pair.
-
-        Args:
-            user_input: The user's question.
-            actual_output: The LLM-generated response.
-            expected_output: Optional ground truth answer.
-            context: Optional ground truth context.
-            retrieval_context: Optional retrieved context from RAG.
-
-        Returns:
-            EvaluationResult with metric scores.
-        """
-        sample = EvaluationSample(
-            sample_id=f"single_{uuid.uuid4().hex[:8]}",
-            user_input=user_input,
-            actual_output=actual_output,
-            expected_output=expected_output,
-            context=context,
-            retrieval_context=retrieval_context,
-        )
-        return self.evaluate_sample(sample)
 
     def _generate_summary(self, results: list[EvaluationResult]) -> dict:
         """Generate aggregate summary statistics."""

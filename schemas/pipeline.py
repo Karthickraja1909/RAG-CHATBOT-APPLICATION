@@ -47,3 +47,5 @@ class QueryResponse(BaseModel):
     total_time_ms: float = Field(default=0.0, description="Total processing time in ms")
     timestamp: datetime = Field(default_factory=datetime.utcnow, description="Response timestamp")
     metadata: dict = Field(default_factory=dict, description="Additional response metadata")
+    followup_questions: list[str] = Field(default_factory=list, description="Suggested follow-up questions")
+    token_usage: dict = Field(default_factory=dict, description="Token usage for this request")

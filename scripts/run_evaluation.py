@@ -7,6 +7,7 @@ Usage:
     python -m scripts.run_evaluation
 """
 
+import asyncio
 import json
 import sys
 import time
@@ -74,11 +75,11 @@ def main():
 
     # ─── Step 3: Run Full Evaluation ──────────────────────────────────
     try:
-        reports = eval_pipeline.run_full_evaluation(
+        reports = asyncio.run(eval_pipeline.arun_full_evaluation(
             dataset_path=settings.eval_dataset_path,
             frameworks=settings.eval_frameworks_list,
             run_rag=settings.eval_run_rag_pipeline and rag_pipeline is not None,
-        )
+        ))
     except Exception as e:
         logger.error(f"Evaluation pipeline failed: {e}")
         sys.exit(1)

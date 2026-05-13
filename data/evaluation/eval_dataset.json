@@ -7,19 +7,15 @@
     {
       "sample_id": "eval_rag_001",
       "user_input": "What is the Ragas framework and what problem does it solve?",
-      "expected_output": "Ragas (Retrieval Augmented Generation Assessment) is a framework for reference-free evaluation of Retrieval Augmented Generation (RAG) pipelines. It addresses the challenge of evaluating RAG systems across multiple dimensions without requiring ground truth human annotations. RAG systems are composed of a retrieval and an LLM-based generation module, and evaluating them is challenging because there are several dimensions to consider: the ability of the retrieval system to identify relevant and focused context passages, the ability of the LLM to exploit such passages in a faithful way, and the quality of the generation itself. Ragas provides a suite of metrics to evaluate these different dimensions, enabling faster evaluation cycles, which is especially important given the fast adoption of LLMs.",
+      "expected_output": "Ragas (Retrieval Augmented Generation Assessment) is a framework for reference-free evaluation of Retrieval Augmented Generation (RAG) systems. It evaluates multiple dimensions of a RAG pipeline, including retrieval quality, grounding or faithfulness to retrieved passages, semantic relevance, and factual correctness. The problem it solves is that RAG systems are difficult to evaluate with traditional reference-answer matching or expensive human annotations because both retrieval and generation quality must be assessed together. Ragas reframes evaluation as an internal consistency problem, which makes it practical for production RAG systems, rapidly changing knowledge bases, and closed-source LLM deployments.",
       "context": [
         "We introduce Ragas (Retrieval Augmented Generation Assessment), a framework for reference-free evaluation of Retrieval Augmented Generation (RAG) pipelines.",
         "RAG systems are composed of a retrieval and an LLM based generation module, and provide LLMs with knowledge from a reference textual database, which enables them to act as a natural language layer between a user and textual databases, reducing the risk of hallucinations.",
-        "Evaluating RAG architectures is challenging because there are several dimensions to consider: the ability of the retrieval system to identify relevant and focused context passages, the ability of the LLM to exploit such passages in a faithful way, or the quality of the generation itself.",
-        "With Ragas, we put forward a suite of metrics which can be used to evaluate these different dimensions without having to rely on ground truth human annotations."
-      ],
-      "retrieval_context": [
-        "We introduce Ragas (Retrieval Augmented Generation Assessment), a framework for reference-free evaluation of Retrieval Augmented Generation (RAG) pipelines.",
-        "Evaluating RAG architectures is challenging because there are several dimensions to consider: the ability of the retrieval system to identify relevant and focused context passages, the ability of the LLM to exploit such passages in a faithful way, or the quality of the generation itself.",
-        "With Ragas, we put forward a suite of metrics which can be used to evaluate these different dimensions without having to rely on ground truth human annotations."
+        "Evaluating RAG architectures is challenging because multiple dimensions must be considered, including whether the retrieval system finds relevant and focused passages, whether the LLM uses those passages faithfully, and whether the generated answer is high quality.",
+        "Ragas provides a suite of metrics for these dimensions without requiring ground-truth human annotations, making evaluation faster and more practical for production RAG systems.",
+        "A key contribution of Ragas is that it reframes evaluation as an internal consistency problem rather than a pure reference-matching problem, which is especially useful for rapidly changing knowledge bases and closed-source LLM deployments."
       ]
-     }
+    }
     
   ]
 }
