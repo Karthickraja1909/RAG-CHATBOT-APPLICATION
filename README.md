@@ -493,20 +493,243 @@ streamlit run app_ui.py
 
 ## LLM Evaluation Pipeline
 
-### Sync Execution
+The evaluation system is built around two LLM-as-a-Judge frameworks — **DeepEval** and **RAGAS** — each providing a different set of metrics. Both frameworks support **sync** and **async** execution modes, share the same dataset schema, and produce unified `EvaluationReport` objects.
 
-```bash
-# Full evaluation (both frameworks)
-python -m scripts.run_evaluation
+### Code Architecture
 
-# Generate dynamic test dataset
-python -m scripts.generate_eval_dataset
-
-# Check thresholds (CI gate)
-python -m scripts.check_thresholds
+```
+evaluation/
+├── evaluation_pipeline.py       # Orchestrator: sync + async, runs both frameworks
+├── deepeval_evaluator.py        # DeepEval: 11 metrics, _TokenCappedModel wrapper
+├── ragas_evaluator.py           # RAGAS: 4 metrics, LangchainLLMWrapper
+├── dataset_manager.py           # Load/save/merge/validate/generate datasets
+└── testset_generator.py         # RAGAS TestsetGenerator (3 strategies)
 ```
 
-### Async Execution (Python)
+#### Key Classes
+
+| Class | File | Purpose |
+|-------|------|---------|
+| `EvaluationPipeline` | `evaluation_pipeline.py` | Top-level orchestrator — load dataset → run RAG → evaluate → save reports |
+| `DeepEvalEvaluator` | `deepeval_evaluator.py` | Wraps DeepEval metrics, handles `_TokenCappedModel` for OpenRouter |
+| `RagasEvaluator` | `ragas_evaluator.py` | Wraps RAGAS metrics via `LangchainLLMWrapper` + `LangchainEmbeddingsWrapper` |
+| `DatasetManager` | `dataset_manager.py` | Dataset CRUD, generation (3 strategies), deduplication, quality validation |
+| `RAGASTestsetGenerator` | `testset_generator.py` | Synthesizes Q&A pairs from documents with difficulty/type metadata |
+
+#### Data Flow
+
+```
+EvaluationPipeline
+  │
+  ├── DatasetManager.load_dataset()       ← Load eval_dataset.json
+  │
+  ├── RAGPipeline.query() per sample      ← Fill actual_output + retrieval_context
+  │
+  ├── DeepEvalEvaluator.aevaluate_dataset()       ← async, batched concurrency
+  │     └── aevaluate_sample() per sample
+  │           └── asyncio.gather(metric.a_measure(LLMTestCase)...) → MetricResult
+  │
+  ├── RagasEvaluator.aevaluate_dataset()          ← async, batched concurrency
+  │     └── aevaluate_sample() per sample
+  │           └── asyncio.gather(metric.single_turn_ascore(SingleTurnSample)...) → MetricResult
+  │
+  └── _save_report()                      → JSON + email
+```
+
+---
+
+### DeepEval — Deep Dive
+
+**File:** `evaluation/deepeval_evaluator.py` (~400 lines)
+
+#### How It Works
+
+1. **Initialization** — `_initialize_metrics()` builds a `metric_map` of lazy-constructed metric instances. Each metric receives a `model` (either a string model name or a `_TokenCappedModel` wrapper) and a `threshold`.
+
+2. **`_TokenCappedModel`** — A custom `DeepEvalBaseLLM` subclass used when `USE_OPENROUTER=true`. DeepEval's default `GPTModel` requests `max_tokens=16384` which exceeds free-tier credit limits. This wrapper caps to 100 tokens and provides both `generate()` (sync via `openai.OpenAI`) and `a_generate()` (async via `openai.AsyncOpenAI`).
+
+3. **`aevaluate_sample(sample)`** — Converts an `EvaluationSample` to a DeepEval `LLMTestCase`, then calls `metric.a_measure(test_case)` and runs **all metrics concurrently** via `asyncio.gather()`. Each metric makes its own LLM call in parallel. Returns an `EvaluationResult` with per-metric scores.
+
+4. **`aevaluate_dataset(dataset)`** — Runs samples in parallel with `asyncio.Semaphore(eval_batch_size)` controlling max concurrent samples. Each sample internally runs metrics concurrently via `aevaluate_sample()`.
+
+7. **Credit Exhaustion** — If an LLM call returns HTTP 402, a `_CreditExhausted` exception propagates up, preserving all partial results collected so far.
+
+8. **Context Truncation** — All contexts are truncated to 1500 chars and limited to 3 items, actual/expected outputs capped at 2000 chars to control token costs.
+
+#### Metrics (11 total)
+
+| Metric | Type | Input Fields | What It Measures |
+|--------|------|-------------|-----------------|
+| `answer_relevancy` | Built-in | input, actual_output | Is the answer relevant to the question? |
+| `faithfulness` | Built-in | input, actual_output, retrieval_context | Is the answer grounded in retrieved context? |
+| `contextual_precision` | Built-in | input, expected_output, retrieval_context | Are relevant docs ranked higher than irrelevant ones? |
+| `contextual_recall` | Built-in | input, expected_output, retrieval_context | Did we retrieve all needed information? |
+| `contextual_relevancy` | Built-in | input, retrieval_context | Is the retrieved context relevant to the query? |
+| `hallucination` | Built-in | input, actual_output, context | Does the answer contain fabricated information? |
+| `bias` | Built-in | input, actual_output | Detects prejudiced or biased content |
+| `toxicity` | Built-in | input, actual_output | Detects harmful or offensive content |
+| `coherence` | GEval | input, actual_output | Logical structure, readability, and flow |
+| `completeness` | GEval | input, actual_output, expected_output | Covers all aspects of the question |
+| `conciseness` | GEval | input, actual_output | Avoids unnecessary repetition and verbosity |
+
+> Metrics 1–6 are always loaded from `DEEPEVAL_METRICS`. Metrics 7–11 (custom production metrics) are added when `EVAL_CUSTOM_METRICS_ENABLED=true`.
+
+#### Code Usage
+
+```python
+from evaluation.deepeval_evaluator import DeepEvalEvaluator
+from schemas.evaluation import EvaluationSample
+
+evaluator = DeepEvalEvaluator(
+    metrics=["answer_relevancy", "faithfulness"],  # or None for .env config
+    threshold=0.7,
+    model="gpt-4o-mini",
+)
+
+# Single sample (all metrics run concurrently)
+import asyncio
+
+sample = EvaluationSample(
+    sample_id="s1",
+    user_input="What is RAG?",
+    actual_output="RAG combines retrieval with generation...",
+    expected_output="RAG is a technique...",
+    retrieval_context=["Retrieved passage about RAG..."],
+    context=["Ground truth about RAG..."],
+)
+result = asyncio.run(evaluator.aevaluate_sample(sample))
+print(result.overall_passed)            # True/False
+print(result.average_score)             # 0.85
+for m in result.metrics:
+    print(f"  {m.metric_name}: {m.score:.3f} ({'PASS' if m.passed else 'FAIL'})")
+
+# Full dataset (samples run in parallel batches)
+from evaluation.dataset_manager import DatasetManager
+dataset = DatasetManager().load_dataset()
+report = asyncio.run(evaluator.aevaluate_dataset(dataset))
+print(f"{report.passed_samples}/{report.total_samples} passed ({report.pass_rate:.0%})")
+```
+
+---
+
+### RAGAS — Deep Dive
+
+**File:** `evaluation/ragas_evaluator.py` (~370 lines)
+
+#### How It Works
+
+1. **Initialization** — `_initialize()` creates a `ChatOpenAI` LLM and `OpenAIEmbeddings` wrapped in RAGAS's `LangchainLLMWrapper` and `LangchainEmbeddingsWrapper`. Provider selection: OpenRouter → Azure → OpenAI. All metrics receive the wrapped LLM; `answer_relevancy` also gets embeddings.
+
+2. **`aevaluate_sample(sample)`** — Converts an `EvaluationSample` to a RAGAS `SingleTurnSample`, then calls `metric.single_turn_ascore(ragas_sample)` and runs **all metrics concurrently** via `asyncio.gather()`.
+
+3. **`aevaluate_dataset(dataset)`** — Runs samples in parallel batches controlled by `asyncio.Semaphore(eval_batch_size)`. Each sample internally runs metrics concurrently via `aevaluate_sample()`.
+
+6. **RAGAS `SingleTurnSample` mapping:**
+
+| EvaluationSample field | SingleTurnSample field | Note |
+|------------------------|------------------------|------|
+| `user_input` | `user_input` | The question |
+| `actual_output` | `response` | LLM-generated answer |
+| `expected_output` | `reference` | Ground truth answer |
+| `retrieval_context` | `retrieved_contexts` | Chunks from RAG pipeline |
+| `context` | `reference_contexts` | Ground truth contexts |
+
+#### Metrics (4 total)
+
+| Metric | Class | Input Fields | What It Measures |
+|--------|-------|-------------|-----------------|
+| `faithfulness` | `Faithfulness` | response, retrieved_contexts | Are all claims in the answer supported by context? |
+| `answer_relevancy` | `AnswerRelevancy` | user_input, response + embeddings | Is the answer relevant and addresses the question? |
+| `context_precision` | `ContextPrecision` | user_input, reference, retrieved_contexts | Are relevant context chunks ranked higher? |
+| `context_recall` | `ContextRecall` | reference, reference_contexts, retrieved_contexts | Does retrieved context cover the ground truth? |
+
+#### Code Usage
+
+```python
+from evaluation.ragas_evaluator import RagasEvaluator
+from schemas.evaluation import EvaluationSample
+
+evaluator = RagasEvaluator(
+    metrics=["faithfulness", "answer_relevancy"],
+    threshold=0.7,
+)
+
+sample = EvaluationSample(
+    sample_id="s1",
+    user_input="What is RAG?",
+    actual_output="RAG combines retrieval with generation...",
+    expected_output="RAG is a technique...",
+    retrieval_context=["Retrieved passage about RAG..."],
+    context=["Ground truth about RAG..."],
+)
+
+# Single sample (all metrics run concurrently)
+import asyncio
+result = asyncio.run(evaluator.aevaluate_sample(sample))
+
+# Full dataset (samples run in parallel batches)
+dataset = DatasetManager().load_dataset()
+report = asyncio.run(evaluator.aevaluate_dataset(dataset))
+print(f"RAGAS: {report.pass_rate:.0%} pass rate in {report.duration_seconds:.1f}s")
+```
+
+---
+
+### DeepEval vs RAGAS — Comparison
+
+| Aspect | DeepEval | RAGAS |
+|--------|----------|-------|
+| **Metrics count** | 11 (6 standard + 5 custom) | 4 |
+| **Custom metrics** | GEval with free-form criteria | Not supported |
+| **Safety metrics** | Bias, Toxicity | — |
+| **LLM wrapper** | `DeepEvalBaseLLM` subclass | `LangchainLLMWrapper` |
+| **Embedding wrapper** | Not needed | `LangchainEmbeddingsWrapper` |
+| **Async scoring** | `metric.a_measure(LLMTestCase)` | `metric.single_turn_ascore(SingleTurnSample)` |
+| **Token control** | `_TokenCappedModel(max_tokens=100)` | `ChatOpenAI(max_tokens=100)` |
+| **Testset generation** | — | `TestsetGenerator` (3 strategies) |
+
+---
+
+### Evaluation Pipeline — Orchestrator
+
+**File:** `evaluation/evaluation_pipeline.py` (~300 lines)
+
+The `EvaluationPipeline` class orchestrates the full workflow with async entry points:
+
+| Method | What It Does |
+|--------|-------------|
+| `arun_full_evaluation()` | Load dataset → run RAG → evaluate with both frameworks **concurrently** via `asyncio.gather()` → save reports |
+| `arun_deepeval_evaluation()` | Async single-framework (DeepEval only) |
+| `arun_ragas_evaluation()` | Async single-framework (RAGAS only) |
+| `aevaluate_single_query()` | One-shot async: run RAG on a single question → evaluate → return results dict |
+
+#### Async Concurrency Model
+
+```
+arun_full_evaluation()
+  │
+  └── asyncio.gather(
+        _run_deepeval(),           ← DeepEvalEvaluator.aevaluate_dataset()
+        _run_ragas()               ← RagasEvaluator.aevaluate_dataset()
+      )
+        │
+        ├── Each aevaluate_dataset() runs samples in parallel:
+        │     asyncio.Semaphore(EVAL_BATCH_SIZE)
+        │       └── aevaluate_sample()     ← Up to EVAL_BATCH_SIZE concurrent
+        │             └── asyncio.gather(
+        │                   metric_1.a_measure(),
+        │                   metric_2.a_measure(),    ← All metrics concurrent
+        │                   metric_3.a_measure(),
+        │                   ...
+        │                 )
+```
+
+**Three levels of concurrency:**
+1. **Framework-level** — DeepEval and RAGAS run simultaneously
+2. **Sample-level** — Up to `EVAL_BATCH_SIZE` samples evaluated at once (default: 10)
+3. **Metric-level** — All metrics for a single sample scored concurrently
+
+#### Full Pipeline Usage
 
 ```python
 import asyncio
@@ -516,62 +739,138 @@ from pipeline.rag_pipeline import RAGPipeline
 pipeline = RAGPipeline()
 eval_pipeline = EvaluationPipeline(rag_pipeline=pipeline)
 
-# Run both frameworks concurrently with batched sample evaluation
+# Both frameworks concurrently, samples batched
 reports = asyncio.run(eval_pipeline.arun_full_evaluation())
+for name, report in reports.items():
+    print(f"{name}: {report.pass_rate:.0%} ({report.duration_seconds:.1f}s)")
 
-# Or single framework
+# Single framework async
 report = asyncio.run(eval_pipeline.arun_deepeval_evaluation())
-report = asyncio.run(eval_pipeline.arun_ragas_evaluation())
+
+# Single query evaluation (async)
+result = asyncio.run(eval_pipeline.aevaluate_single_query(
+    user_input="What is RAG?",
+    expected_output="RAG combines retrieval with generation",
+    context=["Ground truth context"],
+    frameworks=["deepeval", "ragas"],
+))
+print(result["evaluations"]["deepeval"]["average_score"])
 ```
 
-### DeepEval Metrics (11 total)
+#### CLI Entry Points
 
-| Metric | Type | What It Measures |
-|--------|------|-----------------|
-| `answer_relevancy` | Built-in | Answer relevance to question |
-| `faithfulness` | Built-in | Grounded in retrieved context |
-| `contextual_precision` | Built-in | Signal-to-noise in retrieved docs |
-| `contextual_recall` | Built-in | Coverage of ground truth |
-| `contextual_relevancy` | Built-in | Relevance of retrieved context |
-| `hallucination` | Built-in | Fabricated information detection |
-| `bias` | Built-in | Prejudiced or biased content |
-| `toxicity` | Built-in | Harmful or offensive content |
-| `coherence` | GEval | Logical structure and flow |
-| `completeness` | GEval | Thoroughness of answer |
-| `conciseness` | GEval | Avoids unnecessary verbosity |
+```bash
+# Full pipeline — reads all config from .env, no arguments needed
+python -m scripts.run_evaluation
 
-> Custom metrics (bias, toxicity, coherence, completeness, conciseness) enabled via `EVAL_CUSTOM_METRICS_ENABLED=true`.
+# Generate dynamic evaluation dataset
+python -m scripts.generate_eval_dataset
 
-### RAGAS Metrics (4 total)
+# CI threshold gate — exits 0 (pass) or 1 (fail)
+python -m scripts.check_thresholds
+```
 
-| Metric | What It Measures |
-|--------|-----------------|
-| `faithfulness` | Factual consistency with context |
-| `answer_relevancy` | Relevance of answer to question |
-| `context_precision` | Precision of retrieved context |
-| `context_recall` | Recall of ground truth by context |
+---
 
 ### Dynamic Testset Generation
 
-| Strategy | How It Works |
-|----------|-------------|
-| `ragas` | RAGAS TestsetGenerator — multi-complexity (simple/reasoning/multi-context) |
-| `document` | Chunk-based LLM generation from ingested documents |
-| `hybrid` | Both merged + deduplicated via SequenceMatcher |
+**File:** `evaluation/testset_generator.py` (~435 lines) + `evaluation/dataset_manager.py` (~585 lines)
+
+Three strategies for generating evaluation datasets from ingested documents:
+
+| Strategy | Class / Method | How It Works |
+|----------|---------------|-------------|
+| `ragas` | `RAGASTestsetGenerator.generate()` | Uses RAGAS `TestsetGenerator` to build a knowledge graph from documents and synthesize Q&A pairs at 3 complexity levels (simple, reasoning, multi-context) |
+| `document` | `DatasetManager.generate_from_documents()` | Chunks documents, then prompts the LLM to create Q&A pairs from each chunk |
+| `hybrid` | `DatasetManager.generate_hybrid_dataset()` | Runs both strategies, merges results, deduplicates via `SequenceMatcher` (0.85 similarity threshold) |
+
+#### Generated Sample Metadata
+
+Each auto-generated sample is enriched with:
+
+```python
+EvaluationSample(
+    sample_id="ragas_abc123",
+    user_input="What are the key components of RAG?",
+    expected_output="The key components are...",
+    context=["Source passage..."],
+    difficulty="medium",              # easy / medium / hard
+    question_type="reasoning",        # simple / reasoning / multi_context
+    source_strategy="ragas_synthetic", # ragas_synthetic / document_grounded
+    auto_generated=True,
+    human_reviewed=False,
+)
+```
+
+#### Usage
+
+```python
+# Strategy 1: RAGAS TestsetGenerator
+from evaluation.testset_generator import RAGASTestsetGenerator
+
+generator = RAGASTestsetGenerator()
+dataset = generator.generate(testset_size=30)
+
+# Strategy 2: Document-grounded LLM generation
+from evaluation.dataset_manager import DatasetManager
+
+manager = DatasetManager()
+dataset = manager.generate_from_documents(num_samples=20)
+
+# Strategy 3: Hybrid (both merged + deduplicated)
+dataset = manager.generate_hybrid_dataset(
+    ragas_size=20,
+    document_size=10,
+)
+
+# Save generated dataset
+manager.save_dataset(dataset, "data/evaluation/generated_dataset.json")
+```
+
+```bash
+# CLI — uses TESTSET_STRATEGY and TESTSET_SIZE from .env
+python -m scripts.generate_eval_dataset
+```
+
+---
+
+### Evaluation Data Schemas
+
+**File:** `schemas/evaluation.py`
+
+```
+EvaluationSample          → Single test case (question + expected answer + context)
+    ↓ (many)
+EvaluationDataset         → Collection of samples + metadata + versioning
+    ↓ (evaluated by)
+MetricResult              → Single metric score (name, score, threshold, passed, reason)
+    ↓ (many per sample)
+EvaluationResult          → All metric scores for one sample (overall_passed, average_score)
+    ↓ (many per report)
+EvaluationReport          → Full report (framework, results[], summary, duration, config)
+                            Properties: total_samples, passed_samples, pass_rate
+```
 
 ### Evaluation Dataset Format
 
 ```json
 {
-  "dataset_id": "unique_id",
-  "name": "My Evaluation Set",
+  "dataset_id": "eval_20240501_abc123",
+  "name": "Production Evaluation Set v2",
+  "description": "Generated via hybrid strategy",
+  "version": "2.0",
   "samples": [
     {
       "sample_id": "s1",
       "user_input": "What is RAG?",
       "expected_output": "RAG combines retrieval with generation...",
       "context": ["Ground truth context..."],
-      "retrieval_context": null
+      "retrieval_context": null,
+      "difficulty": "easy",
+      "question_type": "simple",
+      "source_strategy": "ragas_synthetic",
+      "auto_generated": true,
+      "human_reviewed": false
     }
   ]
 }
