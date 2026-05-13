@@ -28,7 +28,7 @@ class Settings(BaseSettings):
 
     # ─── LLM Configuration ────────────────────────────────────────
     openai_api_key: str = Field(default="", description="OpenAI API key")
-    openai_model: str = Field(default="gpt-4o-mini", description="OpenAI model for generation")
+    openai_model: str = Field(default="openai/gpt-oss-120b:free", description="OpenAI model for generation")
     openai_embedding_model: str = Field(default="openai/text-embedding-3-small", description="Embedding model")
     openai_temperature: float = Field(default=0.0, description="LLM temperature")
     openai_max_tokens: int = Field(default=300, description="Max tokens for LLM response")
@@ -68,15 +68,15 @@ class Settings(BaseSettings):
     # ─── RAG Pipeline ─────────────────────────────────────────────
     retrieval_strategy: str = Field(default="similarity", description="Retrieval strategy")
     reranking_enabled: bool = Field(default=False, description="Enable LLM-based reranking to reduce retrieval noise")
-    reranker_model: str = Field(default="gpt-4o-mini", description="Model used for reranking retrieved chunks")
+    reranker_model: str = Field(default="openai/gpt-oss-120b:free", description="Model used for reranking retrieved chunks")
     reranker_top_n: int = Field(default=4, description="Number of chunks to keep after reranking (must be <= similarity_top_k)")
     reranker_relevance_threshold: float = Field(default=0.5, description="Minimum reranker relevance score (0.0-1.0). Chunks below this are dropped.")
     context_window_size: int = Field(default=4096, description="Context window for LLM")
     system_prompt_path: str = Field(default="config/prompts/system_prompt.txt", description="System prompt file")
 
     # ─── Evaluation Configuration ─────────────────────────────────
-    eval_model: str = Field(default="gpt-4o-mini", description="Model for LLM-as-a-Judge evaluation")
-    eval_embedding_model: str = Field(default="text-embedding-3-small", description="Embedding model for eval")
+    eval_model: str = Field(default="openai/gpt-oss-120b:free", description="Model for LLM-as-a-Judge evaluation")
+    eval_embedding_model: str = Field(default="openai/text-embedding-3-small", description="Embedding model for eval")
     eval_threshold: float = Field(default=0.7, description="Minimum pass threshold for metrics")
     eval_dataset_path: str = Field(default="data/evaluation/eval_dataset.json", description="Evaluation dataset")
     eval_results_path: str = Field(default="data/evaluation/results", description="Evaluation results directory")
