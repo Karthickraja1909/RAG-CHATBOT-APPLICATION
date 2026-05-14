@@ -111,10 +111,19 @@ _CSS = """
     font-family: 'Menlo','Monaco','Consolas',monospace;
     font-size: 0.85rem; color: #6b7280;
     width: 0;
-    animation: tw-type 2.8s steps(42, end) forwards,
-               tw-blink 0.7s step-end infinite;
+    animation: tw-loop 5s steps(42, end) infinite,
+               tw-blink 0.7s step-end infinite !important;
+    animation-iteration-count: infinite !important;
+    animation-fill-mode: none !important;
 }
-@keyframes tw-type { from { width: 0; } to { width: 42ch; } }
+@keyframes tw-loop {
+    0%   { width: 0; }
+    5%   { width: 0; }
+    50%  { width: 42ch; }
+    70%  { width: 42ch; }
+    95%  { width: 0; }
+    100% { width: 0; }
+}
 @keyframes tw-blink {
     from, to { border-color: transparent; }
     50% { border-color: #6366f1; }
@@ -516,9 +525,9 @@ with st.sidebar:
 
     st.divider()
 
-    # -- Connection status --
-    pipe = _pipeline()
+    # -- Connection status (use cached pipeline check, don't trigger load) --
     provider, model_name = _provider_info()
+    pipe = st.session_state.pipeline
     status_cls = "online" if pipe else "offline"
     status_txt = "Connected" if pipe else "Disconnected"
     st.markdown(
@@ -574,43 +583,28 @@ def render_chat_page():
             unsafe_allow_html=True,
         )
 
-        suggestions = [
-            ("Explore", "What topics are covered in the knowledge base?"),
-            ("Explain", "How does the RAG pipeline retrieve context?"),
-            ("Evaluate", "What evaluation metrics are used?"),
-            ("Compare", "How do DeepEval and RAGAS differ?"),
-        ]
-        cols = st.columns(2)
-        for i, (lbl, question) in enumerate(suggestions):
-            with cols[i % 2]:
-                if st.button(question, key=f"suggest_{i}", use_container_width=True):
-                    if not st.session_state.active_conv_id:
-                        _new_conversation()
-                    _append_message({"role": "user", "content": question})
-                    st.rerun()
-
         if not pipeline:
             st.error("RAG Pipeline failed to initialize. Verify .env configuration and vector store.")
-        return
 
-    if not pipeline:
-        st.error("RAG Pipeline failed to initialize. Verify .env configuration and vector store.")
-        st.stop()
+    else:
+        if not pipeline:
+            st.error("RAG Pipeline failed to initialize. Verify .env configuration and vector store.")
+            st.stop()
 
-    # -- Render existing messages --
-    for msg in messages:
-        with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
-            ts = msg.get("timestamp", "")
-            if ts:
-                st.markdown(f'<div class="msg-time">{ts}</div>', unsafe_allow_html=True)
-            if msg["role"] == "assistant":
-                _render_followups(msg.get("followups", []))
-                sources = msg.get("sources", [])
-                if sources:
-                    _render_sources(sources, msg.get("time_ms", 0))
+        # -- Render existing messages --
+        for msg in messages:
+            with st.chat_message(msg["role"]):
+                st.markdown(msg["content"])
+                ts = msg.get("timestamp", "")
+                if ts:
+                    st.markdown(f'<div class="msg-time">{ts}</div>', unsafe_allow_html=True)
+                if msg["role"] == "assistant":
+                    _render_followups(msg.get("followups", []))
+                    sources = msg.get("sources", [])
+                    if sources:
+                        _render_sources(sources, msg.get("time_ms", 0))
 
-    # -- Chat input --
+    # -- Chat input (always visible) --
     if prompt := st.chat_input("Type your message..."):
         if not st.session_state.active_conv_id:
             _new_conversation()
