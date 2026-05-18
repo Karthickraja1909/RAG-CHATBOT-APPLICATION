@@ -328,7 +328,7 @@ class FAISSVectorStore:
     def _save_index(self) -> None:
         """Save FAISS index and metadata to disk."""
         try:
-            self.index_path.parent.mkdir(parents=True, exist_ok=True)
+            self.index_path.mkdir(parents=True, exist_ok=True)
 
             faiss = self._get_faiss()
             faiss.write_index(self._index, str(self.index_path / "index.faiss"))
