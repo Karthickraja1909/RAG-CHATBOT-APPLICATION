@@ -57,7 +57,7 @@ jobs:
           EMAIL_ENABLED: ${{ vars.EMAIL_ENABLED || 'true' }}
           EMAIL_SENDER: ${{ secrets.EMAIL_SENDER }}
           EMAIL_SENDER_PASSWORD: ${{ secrets.EMAIL_SENDER_PASSWORD }}
-          EMAIL_RECIPIENTS: ${{ vars.EMAIL_RECIPIENTS }}
+          EMAIL_RECIPIENTS: ${{ secrets.EMAIL_RECIPIENTS }}
           EMAIL_SMTP_HOST: ${{ vars.EMAIL_SMTP_HOST || 'smtp.gmail.com' }}
           EMAIL_SMTP_PORT: ${{ vars.EMAIL_SMTP_PORT || '587' }}
         run: python -m scripts.run_evaluation

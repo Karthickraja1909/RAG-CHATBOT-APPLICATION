@@ -230,8 +230,9 @@ class FAISSVectorStore:
         if use_hybrid and bm25_scores:
             dense_idxs = {int(idx) for idx in indices[0] if idx != -1}
             bm25_ranked = sorted(enumerate(bm25_scores), key=lambda x: x[1], reverse=True)
+            ntotal = self._index.ntotal
             for bm25_idx, bm25_s in bm25_ranked[:fetch_k]:
-                if bm25_idx not in dense_idxs:
+                if bm25_idx not in dense_idxs and bm25_idx < ntotal:
                     # Reconstruct dense score for this idx
                     vec = np.array([self._index.reconstruct(bm25_idx)], dtype=np.float32)
                     dense_s = float(np.dot(query_vector[0], vec[0]))
@@ -359,6 +360,18 @@ class FAISSVectorStore:
                 data = pickle.load(f)
                 self._metadata_store = data["metadata_store"]
                 self._chunk_contents = data["chunk_contents"]
+
+            # Consistency check: metadata must match FAISS index size
+            ntotal = self._index.ntotal
+            if len(self._metadata_store) != ntotal or len(self._chunk_contents) != ntotal:
+                logger.warning(
+                    f"Index/metadata mismatch: FAISS has {ntotal} vectors, "
+                    f"metadata has {len(self._metadata_store)}, "
+                    f"chunks has {len(self._chunk_contents)}. Truncating to match."
+                )
+                min_size = min(ntotal, len(self._metadata_store), len(self._chunk_contents))
+                self._metadata_store = self._metadata_store[:min_size]
+                self._chunk_contents = self._chunk_contents[:min_size]
 
             logger.info(f"Loaded FAISS index with {self._index.ntotal} vectors")
 
