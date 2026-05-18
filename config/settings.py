@@ -28,7 +28,7 @@ class Settings(BaseSettings):
 
     # ─── LLM Configuration ────────────────────────────────────────
     openai_api_key: str = Field(default="", description="OpenAI API key")
-    openai_model: str = Field(default="gpt-4o-mini", description="OpenAI model for generation")
+    openai_model: str = Field(default="openai/gpt-oss-120b:free", description="OpenAI model for generation")
     openai_embedding_model: str = Field(default="openai/text-embedding-3-small", description="Embedding model")
     openai_temperature: float = Field(default=0.0, description="LLM temperature")
     openai_max_tokens: int = Field(default=300, description="Max tokens for LLM response")
